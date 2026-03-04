@@ -1,0 +1,740 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Wealth Wellness Hub API",
+    "version": "2.0.0",
+    "description": "Wealth Wellness Hub - 统一资产管理平台 API\n\n核心特性：\n- 多账户绑定（传统银行 + 加密钱包）\n- 一键同步资产数据\n- AI 驱动的投资洞察建议"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "开发环境"
+    }
+  ],
+  "tags": [
+    { "name": "Auth", "description": "用户认证" },
+    { "name": "Accounts", "description": "账户绑定与同步" },
+    { "name": "Assets", "description": "资产管理" },
+    { "name": "Insights", "description": "AI 洞察与建议" },
+    { "name": "Transactions", "description": "交易记录" },
+    { "name": "Categories", "description": "分类管理" }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "用户注册",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "description": "邮箱地址" },
+                  "password": { "type": "string", "description": "密码（6-20位）" },
+                  "name": { "type": "string", "description": "用户昵称" }
+                },
+                "required": ["email", "password", "name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "用户登录",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" }
+                },
+                "required": ["email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "获取当前用户",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/connect": {
+      "post": {
+        "tags": ["Accounts"],
+        "summary": "绑定账户（银行/加密钱包）",
+        "description": "模拟一键拉取外部账户资产（支持传统银行和加密钱包）",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "type": { 
+                    "type": "string", 
+                    "enum": ["bank", "brokerage", "crypto_wallet"],
+                    "description": "账户类型"
+                  },
+                  "provider": { 
+                    "type": "string", 
+                    "description": "提供商名称，如 'Plaid', 'MetaMask', 'Rainbow'",
+                    "enum": ["plaid", "mock_bank", "metamask", "rainbow", "coinbase"]
+                  },
+                  "credentials": {
+                    "type": "object",
+                    "description": "模拟凭证",
+                    "properties": {
+                      "username": { "type": "string" },
+                      "walletAddress": { "type": "string", "description": "加密钱包地址（可选）" },
+                      "network": { 
+                        "type": "string", 
+                        "description": "区块链网络",
+                        "enum": ["ethereum", "polygon", "arbitrum", "optimism", "taiko", "solana"]
+                      }
+                    }
+                  }
+                },
+                "required": ["type", "provider"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "账户绑定成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountConnection" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts": {
+      "get": {
+        "tags": ["Accounts"],
+        "summary": "获取已绑定的账户列表",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/AccountConnection" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Accounts"],
+        "summary": "解绑账户",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "query", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "解绑成功" }
+        }
+      }
+    },
+    "/accounts/sync": {
+      "post": {
+        "tags": ["Accounts"],
+        "summary": "同步账户资产",
+        "description": "一键拉取已绑定账户的最新资产数据",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accountId": { "type": "integer", "description": "账户ID" }
+                },
+                "required": ["accountId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同步成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "syncedAssets": { "type": "array", "items": { "$ref": "#/components/schemas/Asset" } },
+                        "newAssetsCount": { "type": "integer" },
+                        "updatedAssetsCount": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assets": {
+      "get": {
+        "tags": ["Assets"],
+        "summary": "获取资产列表",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "type", "in": "query", "schema": { "type": "string" } },
+          { "name": "accountId", "in": "query", "schema": { "type": "integer" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AssetListResponse" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Assets"],
+        "summary": "手动添加资产",
+        "description": "支持传统资产和加密资产（增强字段）",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AssetCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AssetResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assets/{id}": {
+      "get": {
+        "tags": ["Assets"],
+        "summary": "获取单个资产",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AssetResponse" }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["Assets"],
+        "summary": "更新资产",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "更新成功" }
+        }
+      },
+      "delete": {
+        "tags": ["Assets"],
+        "summary": "删除资产",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "删除成功" }
+        }
+      }
+    },
+    "/assets/summary": {
+      "get": {
+        "tags": ["Assets"],
+        "summary": "资产总览（Dashboard 核心接口）",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AssetSummary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assets/distribution": {
+      "get": {
+        "tags": ["Assets"],
+        "summary": "资产分布（饼图数据）",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "groupBy", "in": "query", "schema": { "type": "string", "enum": ["type", "category", "account"] } }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DistributionResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assets/trend": {
+      "get": {
+        "tags": ["Assets"],
+        "summary": "资产趋势（折线图数据）",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["week", "month", "quarter", "year"] } },
+          { "name": "months", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrendResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assets/health-score": {
+      "get": {
+        "tags": ["Assets"],
+        "summary": "资产健康分",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthScore" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/insights/recommendations": {
+      "get": {
+        "tags": ["Insights"],
+        "summary": "AI 投资建议（核心加分项）",
+        "description": "基于当前资产配置，结合宏观经济环境，返回个性化的投资建议",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "includeMarketContext", "in": "query", "schema": { "type": "boolean" }, "description": "是否包含宏观市场分析" }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AIInsights" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/insights/portfolio-analysis": {
+      "get": {
+        "tags": ["Insights"],
+        "summary": "投资组合分析",
+        "description": "多维度分析当前资产配置",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PortfolioAnalysis" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "user": { "$ref": "#/components/schemas/User" },
+              "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+            }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "email": { "type": "string" },
+          "name": { "type": "string" },
+          "did": { "type": "string", "description": "去中心化身份标识（Web3）" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AccountConnection": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "type": { "type": "string", "enum": ["bank", "brokerage", "crypto_wallet"] },
+          "provider": { "type": "string" },
+          "name": { "type": "string", "description": "账户名称" },
+          "lastSynced": { "type": "string", "format": "date-time" },
+          "status": { "type": "string", "enum": ["active", "error", "syncing"] }
+        }
+      },
+      "Asset": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "accountId": { "type": "integer", "description": "关联的账户ID" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["cash", "stock", "fund", "crypto", "property", "other"] },
+          "value": { "type": "number" },
+          "currency": { "type": "string" },
+          "category": { "type": "string" },
+          "description": { "type": "string" },
+          "cryptoDetails": { 
+            "$ref": "#/components/schemas/CryptoDetails",
+            "description": "加密资产详细信息（仅 type=crypto 时有值）"
+          },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CryptoDetails": {
+        "type": "object",
+        "description": "加密资产增强字段",
+        "properties": {
+          "network": { 
+            "type": "string", 
+            "enum": ["ethereum", "polygon", "arbitrum", "optimism", "taiko", "solana"],
+            "description": "区块链网络" 
+          },
+          "walletAddress": { "type": "string", "description": "钱包地址" },
+          "tokenSymbol": { "type": "string", "description": "代币符号（如 ETH, USDC）" },
+          "tokenAddress": { "type": "string", "description": "代币合约地址" },
+          "isStaked": { "type": "boolean", "description": "是否已质押" },
+          "stakedAmount": { "type": "number", "description": "质押数量" },
+          "apy": { "type": "number", "description": "年化收益率" }
+        }
+      },
+      "AssetCreate": {
+        "type": "object",
+        "properties": {
+          "accountId": { "type": "integer" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["cash", "stock", "fund", "crypto", "property", "other"] },
+          "value": { "type": "number" },
+          "currency": { "type": "string" },
+          "category": { "type": "string" },
+          "description": { "type": "string" },
+          "cryptoDetails": { "$ref": "#/components/schemas/CryptoDetails" }
+        },
+        "required": ["name", "type", "value"]
+      },
+      "AssetResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "$ref": "#/components/schemas/Asset" }
+        }
+      },
+      "AssetListResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "assets": { "type": "array", "items": { "$ref": "#/components/schemas/Asset" } },
+              "pagination": { "$ref": "#/components/schemas/Pagination" }
+            }
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "total": { "type": "integer" },
+          "totalPages": { "type": "integer" }
+        }
+      },
+      "AssetSummary": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "totalValue": { "type": "number", "description": "总资产" },
+              "totalValueCNY": { "type": "number", "description": "人民币计价" },
+              "totalValueUSD": { "type": "number", "description": "美元计价" },
+              "baseCurrency": { "type": "string", "example": "SGD" },
+              "exchangeRate": {
+                "type": "object",
+                "properties": {
+                  "SGD": { "type": "number" },
+                  "USD": { "type": "number" },
+                  "CNY": { "type": "number" },
+                  "EUR": { "type": "number" }
+                }
+              },
+              "assetCount": { "type": "integer" },
+              "accountCount": { "type": "integer", "description": "绑定账户数" },
+              "netWorth": { "type": "number", "description": "净资产" },
+              "dailyChange": { "type": "number", "description": "日变化" },
+              "dailyChangePercent": { "type": "number", "description": "日变化百分比" }
+            }
+          }
+        }
+      },
+      "DistributionResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "byType": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "value": { "type": "number" },
+                    "percentage": { "type": "number" },
+                    "color": { "type": "string", "description": "图表颜色" }
+                  }
+                }
+              },
+              "byAccount": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "accountId": { "type": "integer" },
+                    "accountName": { "type": "string" },
+                    "value": { "type": "number" },
+                    "percentage": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "TrendResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "trend": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "date": { "type": "string" },
+                    "value": { "type": "number" }
+                  }
+                }
+              },
+              "changeRate": { "type": "number" },
+              "changeValue": { "type": "number" }
+            }
+          }
+        }
+      },
+      "HealthScore": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "score": { "type": "integer", "description": "健康分 0-100" },
+              "grade": { "type": "string", "enum": ["A", "B", "C", "D", "F"] },
+              "factors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "score": { "type": "integer" },
+                    "suggestion": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "AIInsights": {
+        "type": "object",
+        "description": "AI 投资建议（核心加分项）",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "marketContext": {
+                "type": "object",
+                "description": "宏观市场环境分析",
+                "properties": {
+                  "scenario": { "type": "string", "example": "降息周期" },
+                  "summary": { "type": "string" },
+                  "relevantIndicators": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              },
+              "recommendations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "integer" },
+                    "type": { "type": "string", "enum": ["warning", "opportunity", "info"] },
+                    "title": { "type": "string" },
+                    "description": { "type": "string" },
+                    "action": { "type": "string", "description": "建议操作" },
+                    "potentialImpact": { "type": "string", "description": "潜在影响" },
+                    "confidence": { "type": "number", "description": "置信度 0-1" }
+                  }
+                }
+              },
+              "generatedAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "PortfolioAnalysis": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "diversificationScore": { "type": "integer", "description": "分散化评分" },
+              "riskLevel": { "type": "string", "enum": ["conservative", "moderate", "aggressive"] },
+              "liquidityScore": { "type": "integer", "description": "流动性评分" },
+              "returnScore": { "type": "integer", "description": "收益评分" },
+              "comparison": {
+                "type": "object",
+                "properties": {
+                  "vsPeers": { "type": "string", "description": "与同龄人对比" },
+                  "benchmarks": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
