@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 from database import get_db
 from models import Transaction, Asset, User
@@ -10,42 +10,9 @@ from schemas import (
     TransactionImportRequest,
     SuccessResponse,
 )
-from core.security import decode_access_token
+from core.dependencies import get_current_user
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
-
-
-def get_current_user(token: str = None, db: Session = Depends(get_db)) -> User:
-    """Dependency to get current user from token."""
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    user_id = decode_access_token(token)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    return user
-
-
-def get_current_user_from_auth(
-    authorization: Optional[str] = Header(None, alias="Authorization"),
-    token: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-) -> User:
-    resolved_token = token
-    if authorization:
-        resolved_token = authorization.split(" ", 1)[1] if authorization.startswith("Bearer ") else authorization
-    return get_current_user(resolved_token, db)
 
 
 @router.get("", response_model=SuccessResponse)
@@ -54,7 +21,7 @@ def list_transactions(
     transaction_type: Optional[str] = Query(None),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
-    current_user: User = Depends(get_current_user_from_auth),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get list of transactions."""
@@ -84,7 +51,7 @@ def list_transactions(
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def create_transaction(
     transaction: TransactionCreate,
-    current_user: User = Depends(get_current_user_from_auth),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Create a new transaction."""
@@ -120,7 +87,7 @@ def create_transaction(
 @router.post("/import", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def import_transactions(
     request: TransactionImportRequest,
-    current_user: User = Depends(get_current_user_from_auth),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Batch import transactions."""

@@ -156,12 +156,16 @@ class AssetSummary(BaseModel):
 class HealthScoreFactor(BaseModel):
     name: str
     score: int
+    weight: Optional[float] = None
+    evidence: Optional[str] = None
+    recommendation: Optional[str] = None
 
 
 class HealthScore(BaseModel):
     score: int
     grade: str
     factors: List[HealthScoreFactor]
+    methodology: Optional[str] = None
 
 
 # ==================== Account Schemas ====================

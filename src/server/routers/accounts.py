@@ -1,12 +1,13 @@
-from datetime import datetime
-from typing import Optional
-
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from core.security import decode_access_token
+from core.dependencies import get_current_user
 from database import get_db
-from models import Asset, AssetType, ConnectedAccount, User
+from models import ConnectedAccount, User
+from services.account_service import (
+    create_mock_assets_for_connected_account,
+    sync_account_and_build_recommendations,
+)
 from schemas import (
     AccountConnectRequest,
     ConnectedAccountResponse,
@@ -15,46 +16,6 @@ from schemas import (
 )
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
-
-
-def _resolve_token(
-    authorization: Optional[str],
-    token: Optional[str],
-) -> Optional[str]:
-    """Resolve token from Bearer header first, then query fallback."""
-    if authorization:
-        if authorization.startswith("Bearer "):
-            return authorization.split(" ", 1)[1]
-        return authorization
-    return token
-
-
-def get_current_user(
-    authorization: Optional[str] = Header(None, alias="Authorization"),
-    token: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
-) -> User:
-    resolved_token = _resolve_token(authorization, token)
-    if not resolved_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-
-    user_id = decode_access_token(resolved_token)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    return user
 
 
 @router.get("", response_model=SuccessResponse)
@@ -92,34 +53,13 @@ def connect_account(
     db.commit()
     db.refresh(account)
 
-    # Mock assets for non-crypto accounts.
-    if request.account_type.value in ["bank", "brokerage"]:
-        mock_assets = [
-            {
-                "name": f"{request.name} - Savings",
-                "asset_type": AssetType.CASH,
-                "value": 10000,
-                "category": "Connected",
-            },
-            {
-                "name": f"{request.name} - Investment",
-                "asset_type": AssetType.STOCK,
-                "value": 25000,
-                "category": "Connected",
-            },
-        ]
-        for asset_data in mock_assets:
-            db.add(
-                Asset(
-                    user_id=current_user.id,
-                    name=asset_data["name"],
-                    asset_type=asset_data["asset_type"],
-                    value=asset_data["value"],
-                    category=asset_data["category"],
-                    currency="USD",
-                )
-            )
-        db.commit()
+    create_mock_assets_for_connected_account(
+        db=db,
+        user_id=current_user.id,
+        account_name=request.name,
+        account_type=request.account_type.value,
+    )
+    db.commit()
 
     return SuccessResponse(
         success=True,
@@ -175,10 +115,9 @@ def sync_account(
             detail="Account not found",
         )
 
-    account.last_synced = datetime.utcnow()
-    db.commit()
+    sync_data = sync_account_and_build_recommendations(db, account)
 
     return SuccessResponse(
         success=True,
-        data={"message": "Sync completed", "synced_at": account.last_synced},
+        data=sync_data,
     )

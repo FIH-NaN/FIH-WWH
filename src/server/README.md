@@ -16,14 +16,22 @@ server/
 │
 ├── core/                    # Core utilities and security
 │   ├── __init__.py
-│   └── security.py          # JWT & password hashing utilities
+│   ├── security.py          # JWT & password hashing utilities
+│   └── dependencies.py      # Shared auth dependency (current user)
 │
 ├── routers/                 # API endpoint handlers organized by domain
 │   ├── __init__.py
 │   ├── auth.py              # Authentication endpoints (register, login, me)
 │   ├── assets.py            # Asset management endpoints
-│   ├── transactions.py       # Transaction endpoints
-│   └── categories.py        # Category endpoints
+│   ├── accounts.py          # Connected account endpoints
+│   ├── transactions.py      # Transaction endpoints
+│   ├── categories.py        # Category endpoints
+│   └── scheduler.py         # Background scheduler control endpoints
+
+├── services/                # Business logic services
+│   ├── account_service.py
+│   ├── asset_analytics_service.py
+│   └── health_scoring_service.py
 │
 └── entities/                # Domain models (from Python backend)
     ├── __init__.py
@@ -113,6 +121,18 @@ The API will be available at:
 - `GET /categories` - List categories
 - `POST /categories` - Create category
 
+### Accounts (`routers/accounts.py`)
+- `GET /accounts` - List connected accounts
+- `POST /accounts/connect` - Connect account
+- `POST /accounts/sync` - Sync account and return next actions
+- `DELETE /accounts?id={id}` - Disconnect account
+
+### Scheduler (`routers/scheduler.py`)
+- `GET /scheduler/jobs` - List scheduled jobs
+- `POST /scheduler/jobs/{job_id}/trigger` - Trigger job now
+- `DELETE /scheduler/jobs/{job_id}` - Remove scheduled job
+- `GET /scheduler/status` - Get scheduler runtime status
+
 ## Database Models
 
 ### User
@@ -154,14 +174,14 @@ The API will be available at:
 
 ## Authentication
 
-All endpoints (except `/auth/register` and `/auth/login`) require a valid JWT token passed as a query parameter or header:
+All endpoints (except `/auth/register` and `/auth/login`) require a valid JWT token. Preferred mode is `Authorization: Bearer <token>`; query token fallback is retained for compatibility:
 
 ```bash
-# Query parameter
-curl "http://localhost:8000/assets?token=eyJhb..."
-
-# Or Authorization header
+# Preferred Authorization header
 curl -H "Authorization: Bearer eyJhb..." http://localhost:8000/assets
+
+# Compatibility query parameter
+curl "http://localhost:8000/assets?token=eyJhb..."
 ```
 
 Tokens are valid for 30 minutes (configurable in `.env`).
@@ -194,7 +214,7 @@ All responses follow a consistent format:
 - **ORM**: SQLAlchemy 2.0 with relationship mappings
 - **Validation**: Pydantic v2 with custom error handling
 - **JWT**: python-jose with HS256 algorithm
-- **Password Hashing**: bcrypt with auto-upgrade
+- **Password Hashing**: pbkdf2_sha256
 
 ## Future Improvements
 
