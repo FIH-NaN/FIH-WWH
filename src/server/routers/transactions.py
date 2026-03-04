@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -37,19 +37,28 @@ def get_current_user(token: str = None, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def get_current_user_from_auth(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+) -> User:
+    resolved_token = token
+    if authorization:
+        resolved_token = authorization.split(" ", 1)[1] if authorization.startswith("Bearer ") else authorization
+    return get_current_user(resolved_token, db)
+
+
 @router.get("", response_model=SuccessResponse)
 def list_transactions(
     asset_id: Optional[int] = Query(None),
     transaction_type: Optional[str] = Query(None),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Get list of transactions."""
-    user = get_current_user(token, db)
-
-    query = db.query(Transaction).filter(Transaction.user_id == user.id)
+    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
 
     if asset_id:
         query = query.filter(Transaction.asset_id == asset_id)
@@ -75,15 +84,13 @@ def list_transactions(
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def create_transaction(
     transaction: TransactionCreate,
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Create a new transaction."""
-    user = get_current_user(token, db)
-
     # Verify asset exists and belongs to user
     asset = db.query(Asset).filter(
-        Asset.id == transaction.asset_id, Asset.user_id == user.id
+        Asset.id == transaction.asset_id, Asset.user_id == current_user.id
     ).first()
     if not asset:
         raise HTTPException(
@@ -92,7 +99,7 @@ def create_transaction(
         )
 
     new_transaction = Transaction(
-        user_id=user.id,
+        user_id=current_user.id,
         asset_id=transaction.asset_id,
         transaction_type=transaction.transaction_type,
         amount=transaction.amount,
@@ -113,12 +120,10 @@ def create_transaction(
 @router.post("/import", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def import_transactions(
     request: TransactionImportRequest,
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Batch import transactions."""
-    user = get_current_user(token, db)
-
     imported = []
     failed = []
 
@@ -126,7 +131,7 @@ def import_transactions(
         try:
             # Verify asset exists and belongs to user
             asset = db.query(Asset).filter(
-                Asset.id == item.asset_id, Asset.user_id == user.id
+                Asset.id == item.asset_id, Asset.user_id == current_user.id
             ).first()
             if not asset:
                 failed.append(
@@ -138,7 +143,7 @@ def import_transactions(
                 continue
 
             new_transaction = Transaction(
-                user_id=user.id,
+                user_id=current_user.id,
                 asset_id=item.asset_id,
                 transaction_type=item.transaction_type,
                 amount=item.amount,

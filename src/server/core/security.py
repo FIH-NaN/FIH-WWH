@@ -6,8 +6,8 @@ from config import get_settings
 
 settings = get_settings()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing. pbkdf2_sha256 is stable across environments for hackathon MVP use.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
@@ -40,7 +40,7 @@ def decode_access_token(token: str) -> Optional[str]:
     """Decode JWT token and return user_id."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: str = payload.get("sub")
+        user_id: Optional[str] = payload.get("sub")
         if user_id is None:
             return None
         return user_id

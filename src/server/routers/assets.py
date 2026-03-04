@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -40,19 +40,28 @@ def get_current_user(token: str = None, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def get_current_user_from_auth(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+) -> User:
+    resolved_token = token
+    if authorization:
+        resolved_token = authorization.split(" ", 1)[1] if authorization.startswith("Bearer ") else authorization
+    return get_current_user(resolved_token, db)
+
+
 @router.get("", response_model=SuccessResponse)
 def list_assets(
     asset_type: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Get list of assets."""
-    user = get_current_user(token, db)
-
-    query = db.query(Asset).filter(Asset.user_id == user.id)
+    query = db.query(Asset).filter(Asset.user_id == current_user.id)
 
     if asset_type:
         query = query.filter(Asset.asset_type == asset_type)
@@ -76,14 +85,12 @@ def list_assets(
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def create_asset(
     asset: AssetCreate,
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Create a new asset."""
-    user = get_current_user(token, db)
-
     new_asset = Asset(
-        user_id=user.id,
+        user_id=current_user.id,
         name=asset.name,
         asset_type=asset.asset_type,
         value=asset.value,
@@ -101,17 +108,15 @@ def create_asset(
     )
 
 
-@router.get("/{asset_id}", response_model=SuccessResponse)
+@router.get("/{asset_id:int}", response_model=SuccessResponse)
 def get_asset(
     asset_id: int,
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Get single asset by ID."""
-    user = get_current_user(token, db)
-
     asset = db.query(Asset).filter(
-        Asset.id == asset_id, Asset.user_id == user.id
+        Asset.id == asset_id, Asset.user_id == current_user.id
     ).first()
 
     if not asset:
@@ -126,18 +131,16 @@ def get_asset(
     )
 
 
-@router.put("/{asset_id}", response_model=SuccessResponse)
+@router.put("/{asset_id:int}", response_model=SuccessResponse)
 def update_asset(
     asset_id: int,
     asset: AssetUpdate,
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Update asset."""
-    user = get_current_user(token, db)
-
     db_asset = db.query(Asset).filter(
-        Asset.id == asset_id, Asset.user_id == user.id
+        Asset.id == asset_id, Asset.user_id == current_user.id
     ).first()
 
     if not db_asset:
@@ -162,17 +165,15 @@ def update_asset(
     )
 
 
-@router.delete("/{asset_id}", response_model=SuccessResponse)
+@router.delete("/{asset_id:int}", response_model=SuccessResponse)
 def delete_asset(
     asset_id: int,
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Delete asset."""
-    user = get_current_user(token, db)
-
     db_asset = db.query(Asset).filter(
-        Asset.id == asset_id, Asset.user_id == user.id
+        Asset.id == asset_id, Asset.user_id == current_user.id
     ).first()
 
     if not db_asset:
@@ -192,13 +193,11 @@ def delete_asset(
 
 @router.get("/summary", response_model=SuccessResponse)
 def asset_summary(
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Get asset summary."""
-    user = get_current_user(token, db)
-
-    assets = db.query(Asset).filter(Asset.user_id == user.id).all()
+    assets = db.query(Asset).filter(Asset.user_id == current_user.id).all()
     total_value = sum(a.value for a in assets)
 
     summary = AssetSummary(
@@ -216,13 +215,11 @@ def asset_summary(
 
 @router.get("/distribution", response_model=SuccessResponse)
 def asset_distribution(
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Get asset distribution by type."""
-    user = get_current_user(token, db)
-
-    assets = db.query(Asset).filter(Asset.user_id == user.id).all()
+    assets = db.query(Asset).filter(Asset.user_id == current_user.id).all()
     distribution = {}
 
     for asset in assets:
@@ -240,13 +237,11 @@ def asset_distribution(
 
 @router.get("/health-score", response_model=SuccessResponse)
 def health_score(
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Get asset health score."""
-    user = get_current_user(token, db)
-
-    assets = db.query(Asset).filter(Asset.user_id == user.id).all()
+    assets = db.query(Asset).filter(Asset.user_id == current_user.id).all()
 
     # Simplified scoring logic
     diversification_score = min(90, len(assets) * 10) if len(assets) > 0 else 0

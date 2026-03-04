@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 from enum import Enum
 
 
@@ -164,10 +164,60 @@ class HealthScore(BaseModel):
     factors: List[HealthScoreFactor]
 
 
+# ==================== Account Schemas ====================
+class AccountTypeEnum(str, Enum):
+    BANK = "bank"
+    BROKERAGE = "brokerage"
+    CRYPTO_WALLET = "crypto_wallet"
+
+
+class ProviderEnum(str, Enum):
+    PLAID = "plaid"
+    MOCK_BANK = "mock_bank"
+    METAMASK = "metamask"
+    RAINBOW = "rainbow"
+    COINBASE = "coinbase"
+
+
+class NetworkEnum(str, Enum):
+    ETHEREUM = "ethereum"
+    POLYGON = "polygon"
+    ARBITRUM = "arbitrum"
+    OPTIMISM = "optimism"
+
+
+class AccountConnectRequest(BaseModel):
+    account_type: AccountTypeEnum
+    provider: ProviderEnum
+    name: str
+    wallet_address: Optional[str] = None
+    network: Optional[NetworkEnum] = None
+
+
+class ConnectedAccountResponse(BaseModel):
+    id: int
+    user_id: int
+    account_type: str
+    provider: str
+    name: str
+    status: str
+    wallet_address: Optional[str] = None
+    network: Optional[str] = None
+    last_synced: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SyncRequest(BaseModel):
+    account_id: int
+
+
 # ==================== Response Wrappers ====================
 class SuccessResponse(BaseModel):
-    success: bool
-    data: Optional[dict] = None
+    success: bool = True
+    data: Optional[Any] = None
     message: Optional[str] = None
 
 

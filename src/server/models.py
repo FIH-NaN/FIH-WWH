@@ -20,6 +20,12 @@ class TransactionType(str, enum.Enum):
     EXPENSE = "expense"
 
 
+class AccountType(str, enum.Enum):
+    BANK = "bank"
+    BROKERAGE = "brokerage"
+    CRYPTO_WALLET = "crypto_wallet"
+
+
 # Models
 class User(Base):
     __tablename__ = "users"
@@ -35,6 +41,9 @@ class User(Base):
     assets = relationship("Asset", back_populates="owner", cascade="all, delete-orphan")
     transactions = relationship("Transaction", back_populates="owner", cascade="all, delete-orphan")
     categories = relationship("Category", back_populates="owner", cascade="all, delete-orphan")
+    connected_accounts = relationship(
+        "ConnectedAccount", back_populates="owner", cascade="all, delete-orphan"
+    )
 
 
 class Asset(Base):
@@ -88,3 +97,20 @@ class Category(Base):
 
     # Relationships
     owner = relationship("User", back_populates="categories")
+
+
+class ConnectedAccount(Base):
+    __tablename__ = "connected_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    account_type = Column(String)
+    provider = Column(String)
+    name = Column(String)
+    status = Column(String, default="active")
+    wallet_address = Column(String, nullable=True)
+    network = Column(String, nullable=True)
+    last_synced = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User", back_populates="connected_accounts")

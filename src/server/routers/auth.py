@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from database import get_db
@@ -68,15 +70,23 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=SuccessResponse)
-def get_current_user(token: str = None, db: Session = Depends(get_db)):
+def get_current_user(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
     """Get current user."""
-    if not token:
+    resolved_token = token
+    if authorization:
+        resolved_token = authorization.split(" ", 1)[1] if authorization.startswith("Bearer ") else authorization
+
+    if not resolved_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
 
-    user_id = decode_access_token(token)
+    user_id = decode_access_token(resolved_token)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
@@ -35,16 +35,25 @@ def get_current_user(token: str = None, db: Session = Depends(get_db)) -> User:
     return user
 
 
+def get_current_user_from_auth(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+) -> User:
+    resolved_token = token
+    if authorization:
+        resolved_token = authorization.split(" ", 1)[1] if authorization.startswith("Bearer ") else authorization
+    return get_current_user(resolved_token, db)
+
+
 @router.get("", response_model=SuccessResponse)
 def list_categories(
     category_type: Optional[str] = Query(None),
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Get list of categories."""
-    user = get_current_user(token, db)
-
-    query = db.query(Category).filter(Category.user_id == user.id)
+    query = db.query(Category).filter(Category.user_id == current_user.id)
 
     if category_type:
         query = query.filter(Category.category_type == category_type)
@@ -62,14 +71,12 @@ def list_categories(
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def create_category(
     category: CategoryCreate,
-    token: str = None,
+    current_user: User = Depends(get_current_user_from_auth),
     db: Session = Depends(get_db),
 ):
     """Create a new category."""
-    user = get_current_user(token, db)
-
     new_category = Category(
-        user_id=user.id,
+        user_id=current_user.id,
         name=category.name,
         category_type=category.category_type,
         icon=category.icon,

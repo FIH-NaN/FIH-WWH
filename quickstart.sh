@@ -1,58 +1,55 @@
 #!/bin/bash
-# Quick start script for Wealth Wellness Hub
+# One-command startup for Wealth Wellness Hub (Git Bash / WSL Bash)
 
 set -e
 
-echo "🚀 Wealth Wellness Hub - Quick Start"
-echo "===================================="
-echo ""
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT_DIR"
 
-# Check Python
-echo "✓ Checking Python environment..."
-if [ ! -d ".venv" ]; then
-    echo "  Creating virtual environment..."
-    python3 -m venv .venv
+echo "Starting Wealth Wellness Hub..."
+
+VENV_DIR=".venv"
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || "$OSTYPE" == "cygwin" ]]; then
+  ACTIVATE_PATH="$VENV_DIR/Scripts/activate"
+else
+  ACTIVATE_PATH="$VENV_DIR/bin/activate"
 fi
 
-source .venv/bin/activate
-echo "✓ Virtual environment activated"
-
-# Install backend dependencies
-echo ""
-echo "✓ Installing backend dependencies..."
-pip install -r src/server/requirements.txt > /dev/null 2>&1 || {
-    pip install fastapi uvicorn sqlalchemy pydantic pydantic-settings python-jose bcrypt python-multipart python-dotenv email-validator passlib > /dev/null 2>&1
-}
-echo "  Dependencies installed"
-
-# Setup environment file
-echo ""
-echo "✓ Setting up environment..."
-if [ ! -f "src/server/.env" ]; then
-    cp src/server/.env.example src/server/.env
-    echo "  Created .env file (edit with your settings)"
+if [ ! -d "$VENV_DIR" ]; then
+  python3 -m venv "$VENV_DIR"
 fi
 
-# Install frontend dependencies
-echo ""
-echo "✓ Installing frontend dependencies..."
+# shellcheck disable=SC1090
+source "$ACTIVATE_PATH"
+
+pip install -r src/server/requirements.txt
+
+if [ ! -f "src/server/.env" ] && [ -f "src/server/.env.example" ]; then
+  cp src/server/.env.example src/server/.env
+fi
+
 cd src/web
-npm install > /dev/null 2>&1 || echo "  npm install already complete"
-cd ../..
+npm install
+cd "$ROOT_DIR"
 
-echo ""
-echo "✅ Setup complete!"
-echo ""
-echo "To run the application:"
-echo ""
-echo "  Backend (FastAPI):"
-echo "    cd src/server"
-echo "    python main.py"
-echo "    # API will be at http://localhost:8000"
-echo "    # Swagger UI at http://localhost:8000/docs"
-echo ""
-echo "  Frontend (React):"
-echo "    cd src/web"
-echo "    npm run dev"
-echo "    # App will be at http://localhost:5173"
-echo ""
+cd src/server
+python main.py &
+BACKEND_PID=$!
+cd "$ROOT_DIR"
+
+cd src/web
+npm run dev &
+FRONTEND_PID=$!
+cd "$ROOT_DIR"
+
+echo "Backend: http://localhost:8000"
+echo "Frontend: http://localhost:5173"
+echo "Press Ctrl+C to stop both services"
+
+cleanup() {
+  kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+}
+
+trap cleanup EXIT INT TERM
+wait
