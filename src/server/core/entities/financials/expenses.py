@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from .common import RecurringFrequency
+from ..common import RecurringFrequency
 
 
 class ExpenseCategory(str, Enum):

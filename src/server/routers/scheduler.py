@@ -5,9 +5,9 @@ Allows users to view scheduled jobs and manually trigger tasks.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from database import get_db
-from models import User
-from schemas import SuccessResponse
+from server.db_gateway.database import get_db
+from server.db_gateway.db_models import User
+from server.db_gateway.schemas import SuccessResponse
 from core.security import decode_access_token
 from util.scheduler import list_jobs, remove_job, get_scheduler
 from util.tasks import (

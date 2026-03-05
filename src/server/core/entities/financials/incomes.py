@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from .common import RecurringFrequency
+from ..common import RecurringFrequency
 
 
 class IncomeType(str, Enum):
@@ -42,4 +42,12 @@ class Income:
 
 		def annual_amount(self) -> float:
 				return self.monthly_amount() * 12
+
+
+class InvestmentIncome:
+		pass
+
+
+class LabourIncome:
+		pass
 

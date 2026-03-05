@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from config import get_settings
-from database import init_db
+from server.db_gateway.database import init_db
 from routers import auth, assets, transactions, categories, scheduler
 from util.scheduler import start_scheduler, shutdown_scheduler
 from util.tasks import register_default_tasks

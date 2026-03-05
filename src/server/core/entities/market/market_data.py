@@ -88,8 +88,8 @@ class Dividend:
     dividend_yield: Optional[float] = None
 
 
-  @dataclass(slots=True)
-  class StockFundamentals:
+@dataclass(slots=True)
+class StockFundamentals:
     """Stock fundamental metrics for financial analysis."""
     ticker: str
     company_name: str

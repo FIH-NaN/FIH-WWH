@@ -290,102 +290,15 @@ class BetaCalculation:
 			return "Aggressive (more volatile than market)"
 
 
-@dataclass(slots=True)
-class SharpeRatio:
-	"""Sharpe Ratio calculation for risk-adjusted returns."""
-	asset_id: int
-	asset_identifier: str
-	
-	# The ratio itself
-	sharpe_ratio: Optional[float] = None
-	
-	# Components
-	portfolio_return: Optional[float] = None
-	risk_free_rate: float = 0.02
-	volatility: Optional[float] = None
-	
-	# Time period
-	period: str = "annual"  # "daily", "monthly", "annual"
-	
-	last_updated: datetime = field(default_factory=datetime.now)
+def calc_sharpe_ratio(r: float, rf: float, sd: float):
+		# todo
+		pass
 
-	def calculate(self) -> Optional[float]:
-		"""Calculate Sharpe Ratio."""
-		if self.portfolio_return is None or self.volatility is None or self.volatility == 0:
-			return None
-		
-		return (self.portfolio_return - self.risk_free_rate) / self.volatility
+def calc_sortino_ratio():
+		# todo
+		pass
 
 
-@dataclass(slots=True)
-class SortinoRatio:
-	"""Sortino Ratio (similar to Sharpe but focuses on downside volatility)."""
-	asset_id: int
-	asset_identifier: str
-	
-	# The ratio itself
-	sortino_ratio: Optional[float] = None
-	
-	# Components
-	portfolio_return: Optional[float] = None
-	risk_free_rate: float = 0.02
-	downside_volatility: Optional[float] = None
-	
-	# Target return (minimum acceptable return)
-	target_return: float = 0.0
-	
-	last_updated: datetime = field(default_factory=datetime.now)
-
-	def calculate(self) -> Optional[float]:
-		"""Calculate Sortino Ratio."""
-		if self.portfolio_return is None or self.downside_volatility is None or self.downside_volatility == 0:
-			return None
-		
-		return (self.portfolio_return - self.risk_free_rate) / self.downside_volatility
-
-
-@dataclass(slots=True)
-class MaxDrawdown:
-	"""Maximum Drawdown calculation for portfolio risk assessment."""
-	asset_id: int
-	asset_identifier: str
-	
-	# The metric
-	max_drawdown: Optional[float] = None  # As a negative percentage
-	
-	# When it occurred
-	drawdown_start_date: Optional[date] = None
-	drawdown_end_date: Optional[date] = None
-	
-	# Supporting data
-	prices: List[float] = field(default_factory=list)
-	price_dates: List[date] = field(default_factory=list)
-	
-	# Recovery info
-	recovery_date: Optional[date] = None
-	days_to_recovery: Optional[int] = None
-	
-	last_updated: datetime = field(default_factory=datetime.now)
-
-	def calculate_from_prices(self) -> Optional[float]:
-		"""Calculate max drawdown from price series."""
-		if len(self.prices) < 2:
-			return None
-		
-		max_price = self.prices[0]
-		max_dd = 0.0
-		max_dd_index = 0
-		
-		for i, price in enumerate(self.prices):
-			if price > max_price:
-				max_price = price
-			dd = (price - max_price) / max_price
-			if dd < max_dd:
-				max_dd = dd
-				max_dd_index = i
-		
-		self.max_drawdown = max_dd
-		if max_dd < 0:
-			self.drawdown_end_date = self.price_dates[max_dd_index] if max_dd_index < len(self.price_dates) else None
-		
-		return max_dd
+def calc_max_drawdown(prices):
+		pass
+		# todo
