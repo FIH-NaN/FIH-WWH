@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-from server.db_gateway.database import get_db
-from server.db_gateway.db_models import Asset, User, Transaction
-from server.db_gateway.schemas import (
+
+from src.server.db.database import get_db
+from src.server.db.db_models import Asset, User, Transaction
+from src.server.db.schemas import (
     AssetCreate,
     AssetResponse,
     AssetUpdate,
@@ -14,6 +15,7 @@ from server.db_gateway.schemas import (
     SuccessResponse,
 )
 from core.security import decode_access_token
+
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 

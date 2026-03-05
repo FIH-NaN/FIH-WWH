@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ..common import RecurringFrequency
-
+from src.server.core.entities.common import RecurringFrequency
+from src.server.core.entities.financials.object import FinancialObject
 
 class ExpenseCategory(str, Enum):
+		"""
+		Types of the user expenses
+		"""
 		HOUSING = "housing"
 		TRANSPORT = "transport"
 		FOOD = "food"
@@ -20,7 +23,11 @@ class ExpenseCategory(str, Enum):
 
 
 @dataclass(slots=True)
-class Expense:
+class Expense(FinancialObject):
+		"""
+		Expense class of a user
+		"""
+		id: int
 		name: str
 		category: ExpenseCategory
 		amount: float

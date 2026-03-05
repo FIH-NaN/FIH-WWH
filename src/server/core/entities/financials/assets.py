@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from src.server.core.entities.currency import Currency
 from src.server.core.entities.financials.object import FinancialObject
 
+
 class AssetCategory(str, Enum):
 		
 		# any deposit account

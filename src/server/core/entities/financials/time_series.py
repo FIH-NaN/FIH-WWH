@@ -10,4 +10,4 @@ class TimeSeriesData:
     obj: FinancialObject
     data: pd.DataFrame
 
-    
+ 
