@@ -1,0 +1,42 @@
+Challenge Statement
+Develop an integrated Wealth Wellness Hub that unifies traditional and digital assets while embedding financial wellness analytics to deliver a complete, actionable view of an investor’s total financial health. 
+Context 
+Investors increasingly manage wealth across fragmented ecosystems — from bank deposits and investment portfolios to private assets and digital wallets. This fragmentation obscures their true financial picture and limits their ability to make informed, holistic decisions. 
+Emerging technologies in data analytics, behavioral finance, and open finance APIs now make it possible to consolidate and transform this data into actionable financial intelligence. 
+A Wealth Wellness Hub would serve as a secure, integrated Wealth Wallet that aggregates all assets and acts as a real-time financial health monitor — empowering clients and advisers to assess diversification, identify opportunities, and enhance long-term financial resilience. 
+Expected Features
+Unify and secure data from existing portfolios, private holdings, and digital assets into a single Wealth Wallet. 
+Analyze and assess financial wellness using metrics such as diversification, liquidity, and behavioral resilience. 
+Visualize overall wealth composition and track health indicators over time. 
+Recommend personalized, data-driven actions and scenario-based insights for clients and advisers.
+Deliver an intuitive, interactive digital dashboard that enhances clarity, trust, and proactive engagement. 
+Deliverable
+Detailed project description, in GitHub repository (200 words or less)
+- Specify what the solution is, and how it solves the problem statement
+Criterion
+Innovation (20%)
+Assesses the uniqueness of the solution and evaluates how novel the idea is
+Considers how well it differentiates from existing solutions
+Examines whether it meaningfully addresses the problem statement
+
+Technology and Prototype (20%)
+Evaluates the technical robustness of the solution
+Assesses the appropriateness of the technology stack and system architecture
+Considers the functionality of the prototype
+Evaluates how effectively technology is leveraged to solve the problem
+
+User Experience (20%)
+Assesses and considers how intuitive and user-friendly the solution is
+Examines how well the solution meets the needs of its target users
+
+Feasibility and Impact (20%)
+Evaluates the practicality and real-world applicability of the solution
+Assesses operational feasibility and scalability
+Considers regulations
+Examines the potential social, economic, or industry impact
+
+Market Potential (20%)
+Assesses the commercial viability of the solution
+Considers target market size and customer segmentation
+Evaluates the profitability of the solution
+Assesses the potential revenue and long-term sustainability

@@ -1,13 +1,17 @@
 from datetime import datetime, timedelta
 from typing import Optional
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from config import get_settings
 
 settings = get_settings()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use pbkdf2_sha256 to avoid bcrypt backend incompatibilities in this runtime.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
@@ -46,3 +50,15 @@ def decode_access_token(token: str) -> Optional[str]:
         return user_id
     except JWTError:
         return None
+
+
+def get_bearer_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> str:
+    """Extract Bearer token from Authorization header."""
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return credentials.credentials

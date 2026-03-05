@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
+from typing import Optional
 
-from src.server.db.database import get_db
-from src.server.db.db_models import Asset, User, Transaction
-from src.server.db.schemas import (
+from core.dependencies import get_current_user
+from db.database import get_db
+from db.db_models import Asset, User
+from db.schemas import (
     AssetCreate,
     AssetResponse,
     AssetUpdate,
@@ -14,32 +14,9 @@ from src.server.db.schemas import (
     HealthScoreFactor,
     SuccessResponse,
 )
-from core.security import decode_access_token
 
 
 router = APIRouter(prefix="/assets", tags=["assets"])
-
-
-def get_current_user(token: str = None, db: Session = Depends(get_db)) -> User:
-    """Dependency to get current user from token."""
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    user_id = decode_access_token(token)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    return user
 
 
 @router.get("", response_model=SuccessResponse)
@@ -48,12 +25,10 @@ def list_assets(
     category: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get list of assets."""
-    user = get_current_user(token, db)
-
     query = db.query(Asset).filter(Asset.user_id == user.id)
 
     if asset_type:
@@ -78,12 +53,10 @@ def list_assets(
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def create_asset(
     asset: AssetCreate,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Create a new asset."""
-    user = get_current_user(token, db)
-
     new_asset = Asset(
         user_id=user.id,
         name=asset.name,
@@ -106,12 +79,10 @@ def create_asset(
 @router.get("/{asset_id}", response_model=SuccessResponse)
 def get_asset(
     asset_id: int,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get single asset by ID."""
-    user = get_current_user(token, db)
-
     asset = db.query(Asset).filter(
         Asset.id == asset_id, Asset.user_id == user.id
     ).first()
@@ -132,12 +103,10 @@ def get_asset(
 def update_asset(
     asset_id: int,
     asset: AssetUpdate,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Update asset."""
-    user = get_current_user(token, db)
-
     db_asset = db.query(Asset).filter(
         Asset.id == asset_id, Asset.user_id == user.id
     ).first()
@@ -167,12 +136,10 @@ def update_asset(
 @router.delete("/{asset_id}", response_model=SuccessResponse)
 def delete_asset(
     asset_id: int,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Delete asset."""
-    user = get_current_user(token, db)
-
     db_asset = db.query(Asset).filter(
         Asset.id == asset_id, Asset.user_id == user.id
     ).first()
@@ -194,12 +161,10 @@ def delete_asset(
 
 @router.get("/summary", response_model=SuccessResponse)
 def asset_summary(
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get asset summary."""
-    user = get_current_user(token, db)
-
     assets = db.query(Asset).filter(Asset.user_id == user.id).all()
     total_value = sum(a.value for a in assets)
 
@@ -218,12 +183,10 @@ def asset_summary(
 
 @router.get("/distribution", response_model=SuccessResponse)
 def asset_distribution(
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get asset distribution by type."""
-    user = get_current_user(token, db)
-
     assets = db.query(Asset).filter(Asset.user_id == user.id).all()
     distribution = {}
 
@@ -242,12 +205,10 @@ def asset_distribution(
 
 @router.get("/health-score", response_model=SuccessResponse)
 def health_score(
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get asset health score."""
-    user = get_current_user(token, db)
-
     assets = db.query(Asset).filter(Asset.user_id == user.id).all()
 
     # Simplified scoring logic

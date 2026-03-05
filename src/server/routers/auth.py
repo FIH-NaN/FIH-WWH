@@ -1,17 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import timedelta
-from server.db_gateway.database import get_db
-from server.db_gateway.db_models import User
-from server.db_gateway.schemas import (
-    UserCreate,
+from core.dependencies import get_current_user as resolve_current_user
+from db.database import get_db
+from db.db_models import User
+from db.schemas import (
     UserResponse,
-    Token,
     LoginRequest,
     RegisterRequest,
     SuccessResponse,
 )
-from core.security import hash_password, verify_password, create_access_token, decode_access_token
+from core.security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -68,29 +70,9 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=SuccessResponse)
-def get_current_user(token: str = None, db: Session = Depends(get_db)):
+def get_me(current_user: User = Depends(resolve_current_user)):
     """Get current user."""
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-
-    user_id = decode_access_token(token)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
     return SuccessResponse(
         success=True,
-        data=UserResponse.model_validate(user).model_dump(),
+        data=UserResponse.model_validate(current_user).model_dump(),
     )

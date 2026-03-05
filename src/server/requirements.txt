@@ -4,7 +4,7 @@ sqlalchemy==2.0.48
 pydantic==2.12.5
 pydantic-settings==2.13.1
 python-jose[cryptography]==3.5.0
-bcrypt==5.0.0
+passlib==1.7.4
 python-multipart==0.0.22
 python-dotenv==1.2.2
 alembic==1.18.4
