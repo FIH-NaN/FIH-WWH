@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
-from database import get_db
-from models import Category, User
-from schemas import (
+from server.db_gateway.database import get_db
+from server.db_gateway.db_models import Category, User
+from server.db_gateway.schemas import (
     CategoryCreate,
     CategoryResponse,
     SuccessResponse,

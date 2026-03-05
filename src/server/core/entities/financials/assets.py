@@ -5,25 +5,38 @@ from datetime import date
 from enum import Enum
 from typing import Dict, List, Optional
 
-from .liabilities import Liability
-
+from src.server.core.entities.currency import Currency
+from src.server.core.entities.financials.object import FinancialObject
 
 class AssetCategory(str, Enum):
-		BANK_DEPOSIT = "bank_deposit"
-		DIGITAL_ASSET = "digital_asset"
+		
+		# any deposit account
+		DEPOSIT_ACCOUNT = "deposit_account"
+		
 		STOCK = "stock"
+		
 		ETF = "etf"
+		
 		MUTUAL_FUND = "mutual_fund"
+		
 		BOND = "bond"
+		
 		REAL_ESTATE = "real_estate"
+		
 		COMMODITY = "commodity"
+
+		#
+		DIGITAL_ASSET = "digital_asset"
+		
 		CASH = "cash"
+		
 		OTHER = "other"
 
 
+@staticmethod
 def is_liquid_asset(a: AssetCategory) -> bool:
 		return a in {
-				AssetCategory.BANK_DEPOSIT,
+				AssetCategory.DEPOSIT_ACCOUNT,
 				AssetCategory.CASH,
 				AssetCategory.DIGITAL_ASSET,
 				AssetCategory.STOCK,
@@ -33,11 +46,11 @@ def is_liquid_asset(a: AssetCategory) -> bool:
 
 
 @dataclass(slots=True)
-class Asset:
+class Asset(FinancialObject):
 		id: int
 		name: str
 		category: AssetCategory = field(init=False)
-		currency: str = "USD"
+		currency: Currency
 		tags: List[str] = field(default_factory=list)
 
 		def current_value(self) -> float:
@@ -48,14 +61,14 @@ class Asset:
 
 
 @dataclass(slots=True)
-class BankDeposit(Asset):
+class DepositAccount(Asset):
 		institution: str = ""
 		account_number_masked: str = ""
 		balance: float = 0.0
 		annual_interest_rate: float = 0.0
 
 		def __post_init__(self) -> None:
-				self.category = AssetCategory.BANK_DEPOSIT
+				self.category = AssetCategory.DEPOSIT_ACCOUNT
 
 		def current_value(self) -> float:
 				return self.balance
@@ -80,7 +93,6 @@ class Stock(Asset):
 		ticker: str = ""
 		quantity: float = 0.0
 		market_price: float = 0.0
-		exchange: str = ""
 
 		def __post_init__(self) -> None:
 				self.category = AssetCategory.STOCK

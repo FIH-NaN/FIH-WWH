@@ -7,8 +7,8 @@ import logging
 from datetime import datetime
 import numpy as np
 from sqlalchemy.orm import Session
-from database import SessionLocal
-from models import User
+from server.db_gateway.database import SessionLocal
+from server.db_gateway.db_models import User
 from .market_data import MarketDataFetcher
 from .allocation_frontier import AllocationFrontier, create_mock_historical_prices
 

@@ -31,7 +31,7 @@ from .expenses import (
 )
 
 # Portfolio
-from .portfolio import (
+from .investment.portfolio import (
 	Portfolio,
 )
 
@@ -44,7 +44,7 @@ from .currency import (
 )
 
 # Market Data
-from .market_data import (
+from .market.market_data import (
 	DataSource,
 	PricePoint,
 	HistoricalPriceData,
@@ -59,7 +59,7 @@ from .market_data import (
 )
 
 # Risk Models
-from .risk_models import (
+from .models.risk_models import (
 	GarchModel,
 	ValueAtRisk,
 	CovarianceMatrix,

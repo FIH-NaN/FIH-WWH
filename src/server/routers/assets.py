@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-from database import get_db
-from models import Asset, User, Transaction
-from schemas import (
+from server.db_gateway.database import get_db
+from server.db_gateway.db_models import Asset, User, Transaction
+from server.db_gateway.schemas import (
     AssetCreate,
     AssetResponse,
     AssetUpdate,
