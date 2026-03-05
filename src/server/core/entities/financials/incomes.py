@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from ..common import RecurringFrequency
+from src.server.core.entities.common import RecurringFrequency
+from src.server.core.entities.financials.object import FinancialObject
+from src.server.core.entities.currency import Currency
 
 
 class IncomeType(str, Enum):
@@ -20,13 +22,20 @@ class IncomeType(str, Enum):
 
 
 @dataclass(slots=True)
-class Income:
+class Income(FinancialObject):
+		"""
+		Income 
+		"""
+
+		id: int
 		name: str
 		income_type: IncomeType
 		amount: float
+		currency: Currency
+		cash_flow_id: int
+
 		frequency: RecurringFrequency = RecurringFrequency.MONTHLY
 		source: str = ""
-		currency: str = "USD"
 		is_taxable: bool = True
 
 		def monthly_amount(self) -> float:

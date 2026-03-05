@@ -11,7 +11,7 @@ from src.server.core.entities.financials.liabilities import Liability
 @dataclass(slots=True)
 class Portfolio:
     """
-    A user's complete portfolio containing all their assets, liabilities.
+    A user's complete portfolio containing all their assets and liabilities.
     """
     user_id: int
     assets: Dict[int, Asset]
@@ -29,3 +29,11 @@ class Portfolio:
     def get_sharpe(self):
         pass
     
+
+class InvestmentPortfolio:
+    """
+    A user's investment portfolio
+
+    assets: include cash/deposits, equity, bond, and derivative investments
+    
+    """

@@ -5,23 +5,33 @@ from datetime import date
 from enum import Enum
 from typing import Iterable
 
+from src.server.core.entities.currency import Currency
+
 
 class CashFlowType(str, Enum):
+		""" A cash flow is either inflow or outflow """
 		INFLOW = "inflow"
 		OUTFLOW = "outflow"
-		TRANSFER = "transfer"
 
 
 @dataclass(slots=True)
 class CashFlow:
+		"""
+		Cash flow of a user
+
+		It should not be a financial object but rather a documentation 
+			of a financial object.
+		"""
+		id: int
 		event_date: date
 		flow_type: CashFlowType
 		amount: float
+		currency: Currency
+		related_asset_id: int
+
 		description: str = ""
 		category: str = ""
-		currency: str = "USD"
-		related_asset_name: str = ""
-
+		
 		def signed_amount(self) -> float:
 				if self.flow_type == CashFlowType.INFLOW:
 						return abs(self.amount)
