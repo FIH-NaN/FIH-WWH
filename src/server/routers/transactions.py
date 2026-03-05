@@ -1,40 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
-from server.db_gateway.database import get_db
-from server.db_gateway.db_models import Transaction, Asset, User
-from server.db_gateway.schemas import (
+from core.dependencies import get_current_user
+from db.database import get_db
+from db.db_models import Transaction, Asset, User
+from db.schemas import (
     TransactionCreate,
     TransactionResponse,
     TransactionImportRequest,
     SuccessResponse,
 )
-from core.security import decode_access_token
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
-
-
-def get_current_user(token: str = None, db: Session = Depends(get_db)) -> User:
-    """Dependency to get current user from token."""
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    user_id = decode_access_token(token)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    return user
 
 
 @router.get("", response_model=SuccessResponse)
@@ -43,12 +21,10 @@ def list_transactions(
     transaction_type: Optional[str] = Query(None),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get list of transactions."""
-    user = get_current_user(token, db)
-
     query = db.query(Transaction).filter(Transaction.user_id == user.id)
 
     if asset_id:
@@ -75,12 +51,10 @@ def list_transactions(
 @router.post("", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def create_transaction(
     transaction: TransactionCreate,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Create a new transaction."""
-    user = get_current_user(token, db)
-
     # Verify asset exists and belongs to user
     asset = db.query(Asset).filter(
         Asset.id == transaction.asset_id, Asset.user_id == user.id
@@ -113,12 +87,10 @@ def create_transaction(
 @router.post("/import", response_model=SuccessResponse, status_code=status.HTTP_201_CREATED)
 def import_transactions(
     request: TransactionImportRequest,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Batch import transactions."""
-    user = get_current_user(token, db)
-
     imported = []
     failed = []
 

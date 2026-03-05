@@ -8,10 +8,10 @@ from datetime import datetime
 import numpy as np
 from sqlalchemy.orm import Session
 
-from server.db_gateway.database import SessionLocal
-from server.db_gateway.db_models import User
-from ..services.data_fetcher.market_data import MarketDataFetcher
-from ..services.financial_analysis.allocation_frontier import AllocationFrontier, create_mock_historical_prices
+from db.database import SessionLocal
+from db.db_models import User
+from services.data_fetcher.market_data import MarketDataFetcher
+from services.financial_analysis.allocation_frontier import AllocationFrontier, create_mock_historical_prices
 
 logger = logging.getLogger(__name__)
 

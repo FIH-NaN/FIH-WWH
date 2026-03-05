@@ -5,10 +5,10 @@ Allows users to view scheduled jobs and manually trigger tasks.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from server.db_gateway.database import get_db
-from server.db_gateway.db_models import User
-from server.db_gateway.schemas import SuccessResponse
-from core.security import decode_access_token
+from core.dependencies import get_current_user
+from db.database import get_db
+from db.db_models import User
+from db.schemas import SuccessResponse
 from util.scheduler import list_jobs, remove_job, get_scheduler
 from util.tasks import (
     fetch_global_markets_data,
@@ -19,33 +19,9 @@ from util.tasks import (
 router = APIRouter(prefix="/scheduler", tags=["scheduler"])
 
 
-def get_current_user(token: str = None, db: Session = Depends(get_db)) -> User:
-    """Dependency to get current user from token."""
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    user_id = decode_access_token(token)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    return user
-
-
 @router.get("/jobs", response_model=SuccessResponse)
-def list_scheduled_jobs(token: str = None, db: Session = Depends(get_db)):
+def list_scheduled_jobs(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get list of all scheduled jobs."""
-    user = get_current_user(token, db)
-    
     jobs = list_jobs()
     job_data = []
     
@@ -69,12 +45,10 @@ def list_scheduled_jobs(token: str = None, db: Session = Depends(get_db)):
 @router.post("/jobs/{job_id}/trigger", response_model=SuccessResponse)
 def manually_trigger_job(
     job_id: str,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Manually trigger a scheduled job."""
-    user = get_current_user(token, db)
-    
     # Map job IDs to functions
     job_functions = {
         "fetch_markets_morning": fetch_global_markets_data,
@@ -108,12 +82,10 @@ def manually_trigger_job(
 @router.delete("/jobs/{job_id}", response_model=SuccessResponse)
 def delete_scheduled_job(
     job_id: str,
-    token: str = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Remove a scheduled job."""
-    user = get_current_user(token, db)
-    
     try:
         remove_job(job_id)
         return SuccessResponse(
@@ -128,10 +100,8 @@ def delete_scheduled_job(
 
 
 @router.get("/status", response_model=SuccessResponse)
-def scheduler_status(token: str = None, db: Session = Depends(get_db)):
+def scheduler_status(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get scheduler status."""
-    user = get_current_user(token, db)
-    
     scheduler = get_scheduler()
     jobs = list_jobs()
     

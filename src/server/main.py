@@ -3,10 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from config import get_settings
-from server.db_gateway.database import init_db
-from routers import auth, assets, transactions, categories, scheduler
-from util.scheduler import start_scheduler, shutdown_scheduler
-from util.tasks import register_default_tasks
+from db.database import init_db
+from routers import auth, assets
 
 # Setup logging
 logging.basicConfig(
@@ -21,12 +19,7 @@ init_db()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle app startup and shutdown."""
-    # Startup
-    start_scheduler()
-    register_default_tasks()
     yield
-    # Shutdown
-    shutdown_scheduler()
 
 # Create FastAPI app
 app = FastAPI(
@@ -40,6 +33,7 @@ settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,9 +42,6 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router)
 app.include_router(assets.router)
-app.include_router(transactions.router)
-app.include_router(categories.router)
-app.include_router(scheduler.router)
 
 
 @app.get("/")
