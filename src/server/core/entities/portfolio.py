@@ -4,14 +4,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from src.server.core.entities.financials.assets import Asset, AssetCategory
-from src.server.core.entities.financials.liabilities import Liability
+from src.server.core.entities.assets import Asset, AssetCategory
+from src.server.core.entities.liabilities import Liability
 
 
 @dataclass(slots=True)
 class Portfolio:
     """
-    A user's complete portfolio containing all their assets and liabilities.
+    A user's complete portfolio containing all their registered assets and 
+      liabilities.
     """
     user_id: int
     assets: Dict[int, Asset]
@@ -28,12 +29,4 @@ class Portfolio:
     
     def get_sharpe(self):
         pass
-    
 
-class InvestmentPortfolio:
-    """
-    A user's investment portfolio
-
-    assets: include cash/deposits, equity, bond, and derivative investments
-    
-    """

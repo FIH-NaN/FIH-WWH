@@ -2,15 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
-from config import get_settings
-from db.database import init_db
-from routers import auth, assets
+from src.server.config import get_settings
+from src.server.db.database import init_db
+from src.server.routers import auth, assets
+from src.server.util.scheduler import start_scheduler, shutdown_scheduler
+from src.server.util.tasks import register_default_tasks
 
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
+logger = logging.getLogger(__name__)
 
 # Initialize database
 init_db()
@@ -19,7 +23,18 @@ init_db()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle app startup and shutdown."""
+    # Startup
+    logger.info("Starting up Wealth Wellness Hub API...")
+    start_scheduler()
+    register_default_tasks()
+    logger.info("API startup complete")
+    
     yield
+    
+    # Shutdown
+    logger.info("Shutting down API...")
+    shutdown_scheduler()
+    logger.info("API shutdown complete")
 
 # Create FastAPI app
 app = FastAPI(
@@ -64,8 +79,8 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "main:app",
+        "src.server.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8080,
         reload=True,
     )

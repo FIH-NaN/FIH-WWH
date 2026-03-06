@@ -1,31 +1,31 @@
 # Core entity models for financial management
 
 # Assets
-from .assets import (
+from .financials.assets import (
 	Asset,
 	AssetCategory,
 	is_liquid_asset,
-	BankDeposit,
+
 	DigitalAsset,
 	Stock,
 	ETF,
 )
 
 # Liabilities
-from .liabilities import (
+from .financials.liabilities import (
 	Liability,
 	LiabilityCategory,
 )
 
 # Income
-from .incomes import (
+from .financials.incomes import (
 	Income,
 	IncomeType,
 	RecurringFrequency,
 )
 
 # Expenses
-from .expenses import (
+from .financials.expenses import (
 	Expense,
 	ExpenseCategory,
 )
@@ -37,10 +37,7 @@ from .investment.portfolio import (
 
 # Currency
 from .currency import (
-	Currency,
-	CurrencyMarketData,
-	DEFAULT_EXCHANGE_RATE_TO_USD,
-	get_exchange_rates_to_usd,
+	Currency
 )
 
 # Market Data
@@ -56,19 +53,6 @@ from .market.market_data import (
 	BondFundamentals,
 	CommodityFundamentals,
 	AssetMarketData,
-)
-
-# Risk Models
-from .models.risk_models import (
-	GarchModel,
-	ValueAtRisk,
-	CovarianceMatrix,
-	CorrelationMatrix,
-	EfficientFrontier,
-	BetaCalculation,
-	SharpeRatio,
-	SortinoRatio,
-	MaxDrawdown,
 )
 
 __all__ = [
@@ -109,14 +93,4 @@ __all__ = [
 	"BondFundamentals",
 	"CommodityFundamentals",
 	"AssetMarketData",
-	# Risk Models
-	"GarchModel",
-	"ValueAtRisk",
-	"CovarianceMatrix",
-	"CorrelationMatrix",
-	"EfficientFrontier",
-	"BetaCalculation",
-	"SharpeRatio",
-	"SortinoRatio",
-	"MaxDrawdown",
 ]

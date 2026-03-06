@@ -21,6 +21,9 @@ class CashFlow:
 
 		It should not be a financial object but rather a documentation 
 			of a financial object.
+		
+		The cash flow should be stored as a key-value database rather than a time
+			series database.
 		"""
 		id: int
 		event_date: date

@@ -8,10 +8,11 @@ from datetime import datetime
 import numpy as np
 from sqlalchemy.orm import Session
 
-from db.database import SessionLocal
-from db.db_models import User
-from services.data_fetcher.market_data import MarketDataFetcher
-from services.financial_analysis.allocation_frontier import AllocationFrontier, create_mock_historical_prices
+from src.server.db.database import SessionLocal
+from src.server.db.tables.user import User
+from src.server.services.user_data.user import UserDataManager
+from src.server.services.data_fetcher.market_data import MarketDataFetcher
+from src.server.services.financial_analysis.allocation_frontier import AllocationFrontier, create_mock_historical_prices
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ def update_asset_valuations():
     Runs every 30 minutes to refresh asset prices and totals.
     """
     try:
-        logger.info("💰 Starting asset valuation update...")
+        logger.info("Starting asset valuation update...")
         
         db = SessionLocal()
         
@@ -139,9 +140,54 @@ def update_asset_valuations():
         return {"status": "error", "message": str(e)}
 
 
+def update_all_users_bank_deposits():
+    """
+    Periodic task: Update bank deposit information for all users daily.
+    Runs once per day to sync bank account balances and deposit records.
+    """
+    try:
+        logger.info("🏦 Starting daily bank deposits update...")
+        
+        db = SessionLocal()
+        
+        # Get all users
+        users = UserDataManager.get_all_users(db)
+        logger.info(f"  Processing {len(users)} users...")
+        
+        # Update bank deposits for each user
+        updated_count = 0
+        success_count = 0
+        error_count = 0
+        
+        for user in users:
+            result = UserDataManager.update_user_bank_deposit(db, user.id)
+            if result:
+                updated_count += 1
+                if result.get("status") == "success":
+                    success_count += 1
+                else:
+                    error_count += 1
+        
+        db.close()
+        
+        logger.info(f"✓ Bank deposits updated for {success_count}/{updated_count} users (Errors: {error_count})")
+        
+        return {
+            "status": "success",
+            "users_updated": updated_count,
+            "users_successful": success_count,
+            "users_failed": error_count,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+    except Exception as e:
+        logger.error(f"✗ Error updating bank deposits: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 def register_default_tasks():
     """Register all default background tasks with the scheduler."""
-    from .scheduler import schedule_cron_job, schedule_interval_job
+    from src.server.util.scheduler import schedule_cron_job, schedule_interval_job
     
     logger.info("📅 Registering default background tasks...")
     
@@ -172,6 +218,14 @@ def register_default_tasks():
         update_asset_valuations,
         job_id="update_valuations",
         interval_minutes=30,
+    )
+    
+    # Update user bank deposits daily at 2am
+    schedule_cron_job(
+        update_all_users_bank_deposits,
+        job_id="update_bank_deposits",
+        hour=2,
+        minute=0,
     )
     
     logger.info("✓ All default tasks registered")

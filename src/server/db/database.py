@@ -1,8 +1,10 @@
+from typing import Generator
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
-from config import get_settings
+from src.server.config import get_settings
 
 
 settings = get_settings()
@@ -20,8 +22,10 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-def get_db() -> Session:
-    """Dependency for getting database session."""
+def get_db() -> Generator[Session, None, None]:
+    """
+    Dependency for getting database session.
+    """
     db = SessionLocal()
     try:
         yield db
@@ -30,6 +34,8 @@ def get_db() -> Session:
 
 
 def init_db():
-    """Initialize database tables."""
+    """
+    Initialize database tables.
+    """
     Base.metadata.create_all(bind=engine)
 
