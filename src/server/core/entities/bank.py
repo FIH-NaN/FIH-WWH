@@ -1,5 +1,5 @@
 
-from src.server.core.entities.wallet.card import Card
+from src.server.core.entities.card import Card
 
 
 class BankAccount:

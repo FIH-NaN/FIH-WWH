@@ -5,6 +5,8 @@ from datetime import date
 from enum import Enum
 from typing import List, Optional
 
+from src.server.core.entities.currency import Currency
+from src.server.core.entities.object import FinancialObject
 
 class LiabilityCategory(str, Enum):
 		MORTGAGE = "mortgage"
@@ -15,16 +17,20 @@ class LiabilityCategory(str, Enum):
 
 
 @dataclass(slots=True)
-class Liability:
+class Liability(FinancialObject):
+		"""
+		A liability class
+		"""
 		name: str
 		category: LiabilityCategory
 		principal: float
 		outstanding_balance: float
+		currency: Currency
+
 		annual_interest_rate: float = 0.0
 		minimum_payment: float = 0.0
 		due_date: Optional[date] = None
 		lender: str = ""
-		currency: str = "USD"
 		tags: List[str] = field(default_factory=list)
 
 		def current_value(self) -> float:

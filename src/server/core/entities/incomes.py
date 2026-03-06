@@ -1,40 +1,42 @@
+# Copyright (c) 2026
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 
 from src.server.core.entities.common import RecurringFrequency
-from src.server.core.entities.financials.object import FinancialObject
+from src.server.core.entities.object import FinancialObject
+from src.server.core.entities.currency import Currency
 
-class ExpenseCategory(str, Enum):
-		"""
-		Types of the user expenses
-		"""
-		HOUSING = "housing"
-		TRANSPORT = "transport"
-		FOOD = "food"
-		HEALTHCARE = "healthcare"
-		INSURANCE = "insurance"
-		EDUCATION = "education"
-		ENTERTAINMENT = "entertainment"
-		DEBT_PAYMENT = "debt_payment"
-		INVESTMENT = "investment"
+
+class IncomeType(str, Enum):
+		SALARY = "salary"
+		BONUS = "bonus"
+		FREELANCE = "freelance"
+		DIVIDEND = "dividend"
+		INTEREST = "interest"
+		RENTAL = "rental"
+		BUSINESS = "business"
 		OTHER = "other"
 
 
 @dataclass(slots=True)
-class Expense(FinancialObject):
+class Income(FinancialObject):
 		"""
-		Expense class of a user
+		Income 
 		"""
+
 		id: int
 		name: str
-		category: ExpenseCategory
+		income_type: IncomeType
 		amount: float
+		currency: Currency
+		cash_flow_id: int
+
 		frequency: RecurringFrequency = RecurringFrequency.MONTHLY
-		vendor: str = ""
-		currency: str = "USD"
-		essential: bool = True
+		source: str = ""
+		is_taxable: bool = True
 
 		def monthly_amount(self) -> float:
 				factors = {
@@ -49,4 +51,5 @@ class Expense(FinancialObject):
 
 		def annual_amount(self) -> float:
 				return self.monthly_amount() * 12
+
 

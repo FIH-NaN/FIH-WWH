@@ -1,18 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from core.dependencies import get_current_user as resolve_current_user
-from db.database import get_db
-from db.db_models import User
-from db.schemas import (
+
+from src.server.services.user_data.user import UserDataManager
+from src.server.services.auth.security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    get_current_user,
+)
+from src.server.db.database import get_db
+from src.server.db.tables.user import User
+from src.server.routers.web_view_model.schemas import (
     UserResponse,
     LoginRequest,
     RegisterRequest,
     SuccessResponse,
-)
-from core.security import (
-    hash_password,
-    verify_password,
-    create_access_token,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -22,7 +24,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """Register a new user."""
     # Check if user exists
-    existing_user = db.query(User).filter(User.email == request.email).first()
+    existing_user = UserDataManager.get_user_by_email(db, request.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -31,10 +33,12 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
     # Create new user
     hashed_pwd = hash_password(request.password)
-    new_user = User(email=request.email, name=request.name, hashed_password=hashed_pwd)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    new_user = UserDataManager.create_user(
+        db=db,
+        email=request.email,
+        name=request.name,
+        hashed_password=hashed_pwd,
+    )
 
     # Create token
     access_token = create_access_token(data={"sub": str(new_user.id)})
@@ -51,7 +55,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=SuccessResponse)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Login user."""
-    user = db.query(User).filter(User.email == request.email).first()
+    user = UserDataManager.get_user_by_email(db, request.email)
     if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -70,7 +74,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=SuccessResponse)
-def get_me(current_user: User = Depends(resolve_current_user)):
+def get_me(current_user: User = Depends(get_current_user)):
     """Get current user."""
     return SuccessResponse(
         success=True,

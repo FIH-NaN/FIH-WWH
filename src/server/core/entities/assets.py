@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from src.server.core.entities.currency import Currency
-from src.server.core.entities.financials.object import FinancialObject
+from src.server.core.entities.object import FinancialObject
 
 
 class AssetCategory(str, Enum):
@@ -106,29 +106,32 @@ class Stock(Asset):
 class ETF(Asset):
 		ticker: str = ""
 		quantity: float = 0.0
-		nav_or_market_price: float = 0.0
+		share_price: float = 0.0
+		fund_family: str = ""
 		expense_ratio: float = 0.0
 
 		def __post_init__(self) -> None:
 				self.category = AssetCategory.ETF
 
 		def current_value(self) -> float:
-				return self.quantity * self.nav_or_market_price
+				return self.quantity * self.share_price
 
 
 @dataclass(slots=True)
 class Bond(Asset):
-		issuer: str = ""
+		isin: str = ""
 		face_value: float = 0.0
-		market_value: float = 0.0
 		coupon_rate: float = 0.0
+		current_price: float = 0.0
+		quantity: float = 0.0
+		market_price: float = 0.0
 		maturity_date: Optional[date] = None
 
 		def __post_init__(self) -> None:
 				self.category = AssetCategory.BOND
 
 		def current_value(self) -> float:
-				return self.market_value if self.market_value > 0 else self.face_value
+				return self.quantity * self.market_price
 
 
 @dataclass(slots=True)

@@ -1,9 +1,10 @@
-import { Bot, ChartColumn, FolderCog, Wallet2 } from 'lucide-react'
+import { Bot, ChartColumn, FolderCog, PieChart, Wallet2 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: ChartColumn },
   { to: '/assets', label: 'My Assets', icon: Wallet2 },
+  { to: '/portfolio', label: 'Portfolio', icon: PieChart },
   { to: '/ai-advisor', label: 'AI Advisor', icon: Bot },
   { to: '/settings', label: 'Settings', icon: FolderCog },
 ]

@@ -25,7 +25,7 @@ def start_scheduler():
     scheduler = get_scheduler()
     if not scheduler.running:
         scheduler.start()
-        logger.info("✓ Background task scheduler started")
+        logger.info("Background task scheduler started")
 
 
 def shutdown_scheduler():
@@ -71,7 +71,7 @@ def schedule_cron_job(
         kwargs=kwargs,
         name=f"{job_id} (cron: {hour}:{minute:02d})",
     )
-    logger.info(f"✓ Scheduled cron job: {job_id} at {hour}:{minute:02d}")
+    logger.info(f"Scheduled cron job: {job_id} at {hour}:{minute:02d}")
 
 
 def schedule_interval_job(

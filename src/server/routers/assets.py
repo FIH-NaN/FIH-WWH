@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 
-from core.dependencies import get_current_user
-from db.database import get_db
-from db.db_models import Asset, User
-from db.schemas import (
+from src.server.services.user_data.asset_data import UserAssetDataManager
+from src.server.services.auth.security import get_current_user
+from src.server.db.database import get_db
+from src.server.db.tables.user import User
+from src.server.routers.web_view_model.schemas import (
     AssetCreate,
     AssetResponse,
     AssetUpdate,
@@ -29,15 +30,14 @@ def list_assets(
     db: Session = Depends(get_db),
 ):
     """Get list of assets."""
-    query = db.query(Asset).filter(Asset.user_id == user.id)
-
-    if asset_type:
-        query = query.filter(Asset.asset_type == asset_type)
-    if category:
-        query = query.filter(Asset.category == category)
-
-    total = query.count()
-    assets = query.offset((page - 1) * limit).limit(limit).all()
+    assets, total = UserAssetDataManager.list_assets(
+        db=db,
+        user_id=user.id,
+        asset_type=asset_type,
+        category=category,
+        page=page,
+        limit=limit
+    )
 
     return SuccessResponse(
         success=True,
@@ -57,7 +57,8 @@ def create_asset(
     db: Session = Depends(get_db),
 ):
     """Create a new asset."""
-    new_asset = Asset(
+    new_asset = UserAssetDataManager.create_asset(
+        db=db,
         user_id=user.id,
         name=asset.name,
         asset_type=asset.asset_type,
@@ -66,9 +67,6 @@ def create_asset(
         category=asset.category,
         description=asset.description,
     )
-    db.add(new_asset)
-    db.commit()
-    db.refresh(new_asset)
 
     return SuccessResponse(
         success=True,
@@ -83,9 +81,7 @@ def get_asset(
     db: Session = Depends(get_db),
 ):
     """Get single asset by ID."""
-    asset = db.query(Asset).filter(
-        Asset.id == asset_id, Asset.user_id == user.id
-    ).first()
+    asset = UserAssetDataManager.get_asset(db=db, user_id=user.id, asset_id=asset_id)
 
     if not asset:
         raise HTTPException(
@@ -107,25 +103,20 @@ def update_asset(
     db: Session = Depends(get_db),
 ):
     """Update asset."""
-    db_asset = db.query(Asset).filter(
-        Asset.id == asset_id, Asset.user_id == user.id
-    ).first()
+    db_asset = UserAssetDataManager.update_asset(
+        db=db,
+        user_id=user.id,
+        asset_id=asset_id,
+        name=asset.name,
+        value=asset.value,
+        description=asset.description,
+    )
 
     if not db_asset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Asset not found",
         )
-
-    if asset.name:
-        db_asset.name = asset.name
-    if asset.value is not None:
-        db_asset.value = asset.value
-    if asset.description:
-        db_asset.description = asset.description
-
-    db.commit()
-    db.refresh(db_asset)
 
     return SuccessResponse(
         success=True,
@@ -140,18 +131,13 @@ def delete_asset(
     db: Session = Depends(get_db),
 ):
     """Delete asset."""
-    db_asset = db.query(Asset).filter(
-        Asset.id == asset_id, Asset.user_id == user.id
-    ).first()
+    deleted = UserAssetDataManager.delete_asset(db=db, user_id=user.id, asset_id=asset_id)
 
-    if not db_asset:
+    if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Asset not found",
         )
-
-    db.delete(db_asset)
-    db.commit()
 
     return SuccessResponse(
         success=True,
@@ -165,14 +151,13 @@ def asset_summary(
     db: Session = Depends(get_db),
 ):
     """Get asset summary."""
-    assets = db.query(Asset).filter(Asset.user_id == user.id).all()
-    total_value = sum(a.value for a in assets)
+    summary_data = UserAssetDataManager.get_asset_summary(db=db, user_id=user.id)
 
     summary = AssetSummary(
-        total_value=total_value,
-        asset_count=len(assets),
-        net_worth=total_value,  # Simplified: actual calculation should subtract liabilities
-        currency="USD",
+        total_value=summary_data["total_value"],
+        asset_count=summary_data["asset_count"],
+        net_worth=summary_data["net_worth"],
+        currency=summary_data["currency"],
     )
 
     return SuccessResponse(
@@ -187,15 +172,7 @@ def asset_distribution(
     db: Session = Depends(get_db),
 ):
     """Get asset distribution by type."""
-    assets = db.query(Asset).filter(Asset.user_id == user.id).all()
-    distribution = {}
-
-    for asset in assets:
-        asset_type = asset.asset_type.value
-        if asset_type not in distribution:
-            distribution[asset_type] = {"count": 0, "value": 0.0}
-        distribution[asset_type]["count"] += 1
-        distribution[asset_type]["value"] += asset.value
+    distribution = UserAssetDataManager.get_asset_distribution(db=db, user_id=user.id)
 
     return SuccessResponse(
         success=True,
@@ -209,23 +186,14 @@ def health_score(
     db: Session = Depends(get_db),
 ):
     """Get asset health score."""
-    assets = db.query(Asset).filter(Asset.user_id == user.id).all()
-
-    # Simplified scoring logic
-    diversification_score = min(90, len(assets) * 10) if len(assets) > 0 else 0
-    liquidity_score = 75
-    return_score = 70
-
-    overall_score = int((diversification_score + liquidity_score + return_score) / 3)
-    grade = "A" if overall_score >= 80 else "B" if overall_score >= 70 else "C"
+    health_data = UserAssetDataManager.get_health_score(db=db, user_id=user.id)
 
     health = HealthScore(
-        score=overall_score,
-        grade=grade,
+        score=health_data["score"],
+        grade=health_data["grade"],
         factors=[
-            HealthScoreFactor(name="资产分散度", score=diversification_score),
-            HealthScoreFactor(name="流动性", score=liquidity_score),
-            HealthScoreFactor(name="投资回报", score=return_score),
+            HealthScoreFactor(name=f["name"], score=f["score"])
+            for f in health_data["factors"]
         ],
     )
 
