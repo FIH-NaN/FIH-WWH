@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Wallet providers
+    PLAID_CLIENT_ID: str = ""
+    PLAID_SECRET: str = ""
+    PLAID_ENV: str = "sandbox"
+    PLAID_REDIRECT_URI: str = ""
+    PLAID_TOKEN_ENCRYPTION_KEY: str = ""
+    GOLDRUSH_API_KEY: str = ""
+    SYNC_JOB_TIMEOUT_SECONDS: int = 300
+    SYNC_MAX_RETRIES: int = 3
+
     # CORS
     CORS_ORIGINS: list = [
         "http://localhost:3000",
