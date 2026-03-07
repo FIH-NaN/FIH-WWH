@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
+from pydantic import Field
 
 
 # Enums
@@ -175,3 +176,91 @@ class ErrorResponse(BaseModel):
     success: bool
     error: str
     message: Optional[str] = None
+
+
+# ==================== Accounts Schemas ====================
+class AccountConnectRequest(BaseModel):
+    type: str
+    provider: str
+    credentials: Optional[dict] = None
+
+
+class AccountConnectionResponse(BaseModel):
+    id: int
+    type: str
+    provider: str
+    name: str
+    network: Optional[str] = None
+    wallet_address: Optional[str] = None
+    last_synced: Optional[datetime] = None
+    status: str
+
+
+class AccountSyncRequest(BaseModel):
+    account_id: Optional[int] = None
+    mode: str = "quick"
+
+
+class AccountSyncTriggerResponse(BaseModel):
+    job_id: int
+    status: str
+
+
+class AccountSyncStatusResponse(BaseModel):
+    job_id: int
+    status: str
+    sync_mode: str = "quick"
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    new_assets_count: int
+    updated_assets_count: int
+    chains_scanned: int = 0
+    tokens_imported: int = 0
+    warnings: List[str] = Field(default_factory=list)
+    error_message: Optional[str] = None
+
+
+class WalletSummaryItem(BaseModel):
+    account_id: int
+    name: str
+    provider: str
+    type: str
+    wallet_address: Optional[str] = None
+    network: Optional[str] = None
+    total_value_usd: float
+    token_count: int
+    active_chain_count: int
+    last_synced: Optional[datetime] = None
+    status: str
+    last_error: Optional[str] = None
+
+
+class WalletSummaryPayload(BaseModel):
+    wallets: List[WalletSummaryItem]
+    total_portfolio_usd: float
+
+
+class WalletHoldingItem(BaseModel):
+    external_holding_id: str
+    name: str
+    symbol: str
+    amount: float
+    value_usd: float
+    price_usd: float
+    chain_name: Optional[str] = None
+    chain_id: Optional[int] = None
+    logo_url: Optional[str] = None
+
+
+class WalletChainGroup(BaseModel):
+    chain_name: str
+    chain_id: Optional[int] = None
+    subtotal_usd: float
+    tokens: List[WalletHoldingItem]
+
+
+class WalletHoldingsPayload(BaseModel):
+    account_id: int
+    wallet_address: Optional[str] = None
+    total_value_usd: float
+    chains: List[WalletChainGroup]

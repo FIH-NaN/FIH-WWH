@@ -1,0 +1,1019 @@
+- Get activity across all chains for address
+Commonly used to locate chains which an address is active on with a single API call.
+https://api.covalenthq.com/v1/address/{walletAddress}/activity/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Path Parameters
+​
+walletAddress
+stringrequired
+The requested wallet address. Passing in an ENS, RNS, Lens Handle, or an Unstoppable Domain resolves automatically.
+
+Query Parameters
+​
+testnets
+boolean
+Set to true to include testnets with activity in the response. By default, it's set to false and only returns mainnet activity.
+
+Response
+200 - application/json
+Successful response
+
+​
+updated_at
+string<date-time>
+The timestamp when the response was generated. Useful to show data staleness to users.
+
+​
+address
+string
+The requested address.
+
+​
+items
+object[]
+List of response items.
+
+200:
+{
+  "updated_at": "2023-11-07T05:31:56Z",
+  "address": "<string>",
+  "items": [
+    {
+      "extends": {
+        "name": "<string>",
+        "chain_id": "<string>",
+        "is_testnet": true,
+        "db_schema_name": "<string>",
+        "label": "<string>",
+        "category_label": "<string>",
+        "logo_url": "<string>",
+        "black_logo_url": "<string>",
+        "white_logo_url": "<string>",
+        "color_theme": {
+          "red": 123,
+          "green": 123,
+          "blue": 123,
+          "alpha": 123,
+          "hex": "<string>",
+          "css_rgb": "<string>"
+        },
+        "is_appchain": true,
+        "appchain_of": {}
+      },
+      "first_seen_at": "2023-11-07T05:31:56Z",
+      "last_seen_at": "2023-11-07T05:31:56Z"
+    }
+  ]
+}
+- Get multichain balances
+Fetch paginated spot & historical native and token balances for a single address on up to 10 EVM chains with one API call.
+https://api.covalenthq.com/v1/allchains/address/{walletAddress}/balances/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Path Parameters
+​
+walletAddress
+stringrequired
+The requested address. Domain names (e.g. demo.eth) NOT supported.
+
+Query Parameters
+​
+chains
+string
+Comma separated list of chain names or IDs to retrieve token balances from. Defaults to all foundational chains.
+
+​
+limit
+integer
+Number of token balances to return per page, up to the default max of 100 items.
+
+​
+before
+string
+Pagination cursor pointing to fetch token balances before a certain point.
+
+​
+cutoff-timestamp
+integer
+UNIX timestamp to retrieve the balance snapshot from the nearest block before the specified cutoff time.
+
+​
+quote-currency
+string
+The currency to convert. Supports USD, CAD, EUR, SGD, INR, JPY, VND, CNY, KRW, RUB, TRY, NGN, ARS, AUD, CHF, GBP, BTC and ETH.
+
+Response
+200 - application/json
+Successful response
+
+​
+updated_at
+string<date-time>
+Timestamp for when the data was last updated.
+
+​
+cursor_before
+string
+Pagination cursor pointing to the previous page.
+
+​
+quote_currency
+string
+The requested quote currency eg: USD.
+
+​
+items
+object[]
+List of token balances returned by the API.
+
+200:
+{
+  "updated_at": "2023-11-07T05:31:56Z",
+  "cursor_before": "<string>",
+  "quote_currency": "<string>",
+  "items": [
+    {
+      "contract_decimals": 123,
+      "contract_name": "<string>",
+      "contract_ticker_symbol": "<string>",
+      "contract_address": "<string>",
+      "contract_display_name": "<string>",
+      "supports_erc": [
+        "<string>"
+      ],
+      "logo_urls": {
+        "token_logo_url": "<string>",
+        "protocol_logo_url": "<string>",
+        "chain_logo_url": "<string>"
+      },
+      "last_transferred_at": "2023-11-07T05:31:56Z",
+      "is_native_token": true,
+      "type": "<string>",
+      "is_spam": true,
+      "balance": "<string>",
+      "balance_24h": "<string>",
+      "quote_rate": 123,
+      "quote_rate_24h": 123,
+      "quote": 123,
+      "quote_24h": 123,
+      "pretty_quote": "<string>",
+      "pretty_quote_24h": "<string>",
+      "chain_id": 123,
+      "chain_name": "<string>",
+      "chain_display_name": "<string>"
+    }
+  ]
+}
+- Get multichain & multiaddress transactions
+Fetch paginated transactions for up to 10 EVM addresses and 10 EVM chains with one API call. Useful for building Activity Feeds.
+https://api.covalenthq.com/v1/allchains/transactions/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Query Parameters
+​
+chains
+string
+Comma separated list of chain names or IDs to retrieve transactions from. Defaults to all foundational chains.
+
+​
+addresses
+string
+Comma separated list of addresses for which transactions are fetched.
+
+​
+limit
+integer
+Number of transactions to return per page, up to the default max of 100 items.
+
+​
+before
+string
+Pagination cursor pointing to fetch transactions before a certain point.
+
+​
+after
+string
+Pagination cursor pointing to fetch transactions after a certain point.
+
+​
+with-logs
+boolean
+Whether to include raw logs in the response.
+
+​
+with-decoded-logs
+boolean
+Whether to include decoded logs in the response.
+
+​
+with-internal
+boolean
+Whether to include internal transfers/transactions.
+
+​
+with-state
+boolean
+Whether to include all transaction state changes with before and after values.
+
+​
+with-input-data
+boolean
+Whether to include the transaction's input data such as the Method ID.
+
+​
+quote-currency
+string
+The currency to convert. Supports USD, CAD, EUR, SGD, INR, JPY, VND, CNY, KRW, RUB, TRY, NGN, ARS, AUD, CHF, GBP, BTC and ETH.
+
+Response
+200 - application/json
+Successful response
+
+​
+updated_at
+string<date-time>
+Timestamp for when the data was last updated.
+
+​
+cursor_before
+string
+Pagination cursor pointing to the previous page.
+
+​
+cursor_after
+string
+Pagination cursor pointing to the next page.
+
+​
+quote_currency
+string
+The requested quote currency eg: USD.
+
+​
+items
+object[]
+List of transactions returned by the API.
+
+200:
+{
+  "updated_at": "2023-11-07T05:31:56Z",
+  "cursor_before": "<string>",
+  "cursor_after": "<string>",
+  "quote_currency": "<string>",
+  "items": [
+    {
+      "block_height": 123,
+      "block_signed_at": "2023-11-07T05:31:56Z",
+      "block_hash": "<string>",
+      "tx_hash": "<string>",
+      "tx_offset": 123,
+      "miner_address": "<string>",
+      "from_address": "<string>",
+      "from_address_label": "<string>",
+      "to_address": "<string>",
+      "to_address_label": "<string>",
+      "value": "<string>",
+      "value_quote": 123,
+      "pretty_value_quote": "<string>",
+      "gas_offered": 123,
+      "gas_spent": 123,
+      "gas_price": 123,
+      "gas_quote": 123,
+      "pretty_gas_quote": "<string>",
+      "gas_quote_rate": 123,
+      "fees_paid": "<string>",
+      "gas_metadata": {
+        "contract_decimals": 123,
+        "contract_name": "<string>",
+        "contract_ticker_symbol": "<string>",
+        "contract_address": "<string>",
+        "supports_erc": [
+          "<string>"
+        ],
+        "logo_url": "<string>"
+      },
+      "successful": true,
+      "chain_id": "<string>",
+      "chain_name": "<string>",
+      "explorers": [
+        {
+          "label": "<string>",
+          "url": "<string>"
+        }
+      ],
+      "log_events": [
+        {
+          "block_signed_at": "2023-11-07T05:31:56Z",
+          "block_height": 123,
+          "tx_offset": 123,
+          "log_offset": 123,
+          "tx_hash": "<string>",
+          "raw_log_topics": [
+            "<string>"
+          ],
+          "sender_contract_decimals": 123,
+          "sender_name": "<string>",
+          "sender_contract_ticker_symbol": "<string>",
+          "sender_address": "<string>",
+          "sender_address_label": "<string>",
+          "sender_logo_url": "<string>",
+          "supports_erc": [
+            "<string>"
+          ],
+          "sender_factory_address": "<string>",
+          "raw_log_data": "<string>",
+          "decoded": {
+            "name": "<string>",
+            "signature": "<string>",
+            "params": [
+              {
+                "name": "<string>",
+                "type": "<string>",
+                "indexed": true,
+                "decoded": true,
+                "value": "<string>"
+              }
+            ]
+          }
+        }
+      ],
+      "internal_transfers": [
+        {
+          "from_address": "<string>",
+          "to_address": "<string>",
+          "value": "<string>",
+          "gas_limit": 123
+        }
+      ],
+      "state_changes": [
+        {
+          "address": "<string>",
+          "balance_before": "<string>",
+          "balance_after": "<string>",
+          "storage_changes": [
+            {
+              "storage_address": "<string>",
+              "value_before": "<string>",
+              "value_after": "<string>"
+            }
+          ],
+          "nonce_before": 123,
+          "nonce_after": 123
+        }
+      ],
+      "input_data": {
+        "method_id": "<string>"
+      }
+    }
+  ]
+}
+
+- Get token balances for address
+Commonly used to fetch the native and fungible (ERC20) tokens held by an address. Response includes spot prices and other metadata.
+https://api.covalenthq.com/v1/{chainName}/address/{walletAddress}/balances_v2/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Path Parameters
+​
+chainName
+stringrequired
+The chain name eg: eth-mainnet.
+
+​
+walletAddress
+stringrequired
+The requested address. Passing in an ENS, RNS, Lens Handle, or an Unstoppable Domain resolves automatically.
+
+Query Parameters
+​
+quote-currency
+string
+The currency to convert. Supports USD, CAD, EUR, SGD, INR, JPY, VND, CNY, KRW, RUB, TRY, NGN, ARS, AUD, CHF, and GBP.
+
+​
+no-spam
+boolean
+If true, the suspected spam tokens are removed. Supported on all Foundational Chains.
+
+Response
+200 - application/json
+Successful response
+
+​
+address
+string
+The requested address.
+
+​
+chain_id
+integer
+The requested chain ID eg: 1.
+
+​
+chain_name
+string
+The requested chain name eg: eth-mainnet.
+
+​
+chain_tip_height
+integer
+The latest block height of the blockchain at the time this response was provided.
+
+​
+chain_tip_signed_at
+string<date-time>
+The timestamp of the latest signed block at the time this response was provided.
+
+​
+quote_currency
+string
+The requested quote currency eg: USD.
+
+​
+updated_at
+string<date-time>
+The timestamp when the response was generated. Useful to show data staleness to users.
+
+​
+items
+object[]
+List of response items.
+
+200:
+{
+  "address": "<string>",
+  "chain_id": 123,
+  "chain_name": "<string>",
+  "chain_tip_height": 123,
+  "chain_tip_signed_at": "2023-11-07T05:31:56Z",
+  "quote_currency": "<string>",
+  "updated_at": "2023-11-07T05:31:56Z",
+  "items": [
+    {
+      "contract_decimals": 123,
+      "contract_name": "<string>",
+      "contract_ticker_symbol": "<string>",
+      "contract_address": "<string>",
+      "contract_display_name": "<string>",
+      "supports_erc": [
+        "<string>"
+      ],
+      "logo_url": "<string>",
+      "logo_urls": {
+        "token_logo_url": "<string>",
+        "protocol_logo_url": "<string>",
+        "chain_logo_url": "<string>"
+      },
+      "last_transferred_at": "2023-11-07T05:31:56Z",
+      "block_height": 123,
+      "native_token": true,
+      "type": "<string>",
+      "is_spam": true,
+      "balance": "<string>",
+      "balance_24h": "<string>",
+      "quote_rate": 123,
+      "quote_rate_24h": 123,
+      "quote": 123,
+      "quote_24h": 123,
+      "pretty_quote": "<string>",
+      "pretty_quote_24h": "<string>",
+      "protocol_metadata": {
+        "protocol_name": "<string>"
+      }
+    }
+  ]
+}
+
+- Get transaction summary for address
+Used to fetch the earliest and latest transactions, and the transaction count for a wallet. Also enriched with gas expenditure details and total ERC20 token transfers count.
+https://api.covalenthq.com/v1/{chainName}/address/{walletAddress}/transactions_summary/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Path Parameters
+​
+chainName
+stringrequired
+The chain name eg: eth-mainnet.
+
+​
+walletAddress
+stringrequired
+The requested address. Passing in an ENS, RNS, Lens Handle, or an Unstoppable Domain resolves automatically.
+
+Query Parameters
+​
+quote-currency
+string
+The currency to convert. Supports USD, CAD, EUR, SGD, INR, JPY, VND, CNY, KRW, RUB, TRY, NGN, ARS, AUD, CHF, and GBP.
+
+​
+with-gas
+boolean
+Include gas summary details. Response times may be impacted for wallets with large number of transactions.
+
+​
+with-transfer-count
+boolean
+Represents the total count of ERC-20 token movement events, including Transfer, Deposit and Withdraw. Response times may be impacted for wallets with large number of transactions.
+
+Response
+200 - application/json
+Successful response
+
+​
+updated_at
+string<date-time>
+The timestamp when the response was generated. Useful to show data staleness to users.
+
+​
+address
+string
+The requested address.
+
+​
+chain_id
+integer
+The requested chain ID eg: 1.
+
+​
+chain_name
+string
+The requested chain name eg: eth-mainnet.
+
+​
+items
+object[]
+List of response items.
+
+200:
+{
+  "updated_at": "2023-11-07T05:31:56Z",
+  "address": "<string>",
+  "chain_id": 123,
+  "chain_name": "<string>",
+  "items": [
+    {
+      "total_count": 123,
+      "transfer_count": 123,
+      "earliest_transaction": {
+        "block_signed_at": "2023-11-07T05:31:56Z",
+        "tx_hash": "<string>",
+        "tx_detail_link": "<string>"
+      },
+      "latest_transaction": {},
+      "gas_summary": {
+        "total_sent_count": 123,
+        "total_fees_paid": "<string>",
+        "total_gas_quote": 123,
+        "pretty_total_gas_quote": "<string>",
+        "average_gas_quote_per_tx": 123,
+        "pretty_average_gas_quote_per_tx": "<string>",
+        "gas_metadata": {
+          "contract_decimals": 123,
+          "contract_name": "<string>",
+          "contract_ticker_symbol": "<string>",
+          "contract_address": "<string>",
+          "supports_erc": [
+            "<string>"
+          ],
+          "logo_url": "<string>"
+        }
+      }
+    }
+  ]
+}
+
+- Get recent transactions for address (v3)
+Commonly used to fetch and render the most recent transactions involving an address. Frequently seen in wallet applications.
+https://api.covalenthq.com/v1/{chainName}/address/{walletAddress}/transactions_v3/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Path Parameters
+​
+chainName
+stringrequired
+The chain name eg: eth-mainnet.
+
+​
+walletAddress
+stringrequired
+The requested address. Passing in an ENS, RNS, Lens Handle, or an Unstoppable Domain resolves automatically.
+
+Query Parameters
+​
+quote-currency
+string
+The currency to convert. Supports USD, CAD, EUR, SGD, INR, JPY, VND, CNY, KRW, RUB, TRY, NGN, ARS, AUD, CHF, and GBP.
+
+​
+no-logs
+boolean
+Omit log events.
+
+​
+block-signed-at-asc
+boolean
+Sort the transactions in ascending chronological order. By default, it's set to false and returns transactions in descending chronological order.
+
+Response
+200 - application/json
+Successful response
+
+​
+address
+string
+The requested address.
+
+​
+updated_at
+string<date-time>
+The timestamp when the response was generated. Useful to show data staleness to users.
+
+​
+quote_currency
+string
+The requested quote currency eg: USD.
+
+​
+chain_id
+integer
+The requested chain ID eg: 1.
+
+​
+chain_name
+string
+The requested chain name eg: eth-mainnet.
+
+​
+chain_tip_height
+integer
+The latest block height of the blockchain at the time this response was provided.
+
+​
+chain_tip_signed_at
+string<date-time>
+The timestamp of the latest signed block at the time this response was provided.
+
+​
+current_page
+integer
+The current page of the response.
+
+​
+links
+object
+
+​
+items
+object[]
+List of response items.
+
+200:
+{
+  "address": "<string>",
+  "updated_at": "2023-11-07T05:31:56Z",
+  "quote_currency": "<string>",
+  "chain_id": 123,
+  "chain_name": "<string>",
+  "chain_tip_height": 123,
+  "chain_tip_signed_at": "2023-11-07T05:31:56Z",
+  "current_page": 123,
+  "links": {
+    "prev": "<string>",
+    "next": "<string>"
+  },
+  "items": [
+    {
+      "block_signed_at": "2023-11-07T05:31:56Z",
+      "block_height": 123,
+      "block_hash": "<string>",
+      "tx_hash": "<string>",
+      "tx_offset": 123,
+      "successful": true,
+      "from_address": "<string>",
+      "miner_address": "<string>",
+      "from_address_label": "<string>",
+      "to_address": "<string>",
+      "to_address_label": "<string>",
+      "value": "<string>",
+      "value_quote": 123,
+      "pretty_value_quote": "<string>",
+      "gas_metadata": {
+        "contract_decimals": 123,
+        "contract_name": "<string>",
+        "contract_ticker_symbol": "<string>",
+        "contract_address": "<string>",
+        "supports_erc": [
+          "<string>"
+        ],
+        "logo_url": "<string>"
+      },
+      "gas_offered": 123,
+      "gas_spent": 123,
+      "gas_price": 123,
+      "fees_paid": "<string>",
+      "gas_quote": 123,
+      "pretty_gas_quote": "<string>",
+      "gas_quote_rate": 123,
+      "explorers": [
+        {
+          "label": "<string>",
+          "url": "<string>"
+        }
+      ],
+      "log_events": [
+        {
+          "block_signed_at": "2023-11-07T05:31:56Z",
+          "block_height": 123,
+          "tx_offset": 123,
+          "log_offset": 123,
+          "tx_hash": "<string>",
+          "raw_log_topics": [
+            "<string>"
+          ],
+          "sender_contract_decimals": 123,
+          "sender_name": "<string>",
+          "sender_contract_ticker_symbol": "<string>",
+          "sender_address": "<string>",
+          "sender_address_label": "<string>",
+          "sender_logo_url": "<string>",
+          "supports_erc": [
+            "<string>"
+          ],
+          "sender_factory_address": "<string>",
+          "raw_log_data": "<string>",
+          "decoded": {
+            "name": "<string>",
+            "signature": "<string>",
+            "params": [
+              {
+                "name": "<string>",
+                "type": "<string>",
+                "indexed": true,
+                "decoded": true,
+                "value": "<string>"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+- Get historical token prices
+Get the historical prices of one (or many) large cap ERC20 tokens between specified date ranges. Also supports native tokens.
+https://api.covalenthq.com/v1/pricing/historical_by_addresses_v2/{chainName}/{quoteCurrency}/{contractAddress}/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Path Parameters
+​
+chainName
+stringrequired
+The chain name eg: eth-mainnet.
+
+​
+quoteCurrency
+stringrequired
+The currency to convert. Supports USD, CAD, EUR, SGD, INR, JPY, VND, CNY, KRW, RUB, TRY, NGN, ARS, AUD, CHF, and GBP.
+
+​
+contractAddress
+stringrequired
+Contract address for the token. Passing in an ENS, RNS, Lens Handle, or an Unstoppable Domain resolves automatically. Supports multiple contract addresses separated by commas.
+
+Query Parameters
+​
+from
+string
+The start day of the historical price range (YYYY-MM-DD).
+
+​
+to
+string
+The end day of the historical price range (YYYY-MM-DD).
+
+​
+prices-at-asc
+boolean
+Sort the prices in chronological ascending order. By default, it's set to false and returns prices in chronological descending order.
+
+Response
+200 - application/json
+Successful response
+
+​
+contract_decimals
+integer
+Use contract decimals to format the token balance for display purposes - divide the balance by 10^{contract_decimals}.
+
+​
+contract_name
+string
+The string returned by the name() method.
+
+​
+contract_ticker_symbol
+string
+The ticker symbol for this contract. This field is set by a developer and non-unique across a network.
+
+​
+contract_address
+string
+Use the relevant contract_address to lookup prices, logos, token transfers, etc.
+
+​
+supports_erc
+string[]
+A list of supported standard ERC interfaces, eg: ERC20 and ERC721.
+
+​
+logo_url
+string
+The contract logo URL.
+
+​
+update_at
+string<date-time>
+​
+quote_currency
+string
+The requested quote currency eg: USD.
+
+​
+logo_urls
+object
+The contract logo URLs.
+
+​
+prices
+object[]
+List of response items.
+
+​
+items
+object[]
+List of response items.
+
+
+200:
+{
+  "contract_decimals": 123,
+  "contract_name": "<string>",
+  "contract_ticker_symbol": "<string>",
+  "contract_address": "<string>",
+  "supports_erc": [
+    "<string>"
+  ],
+  "logo_url": "<string>",
+  "update_at": "2023-11-07T05:31:56Z",
+  "quote_currency": "<string>",
+  "logo_urls": {
+    "token_logo_url": "<string>",
+    "protocol_logo_url": "<string>",
+    "chain_logo_url": "<string>"
+  },
+  "prices": [
+    {
+      "contract_metadata": {
+        "contract_decimals": 123,
+        "contract_name": "<string>",
+        "contract_ticker_symbol": "<string>",
+        "contract_address": "<string>",
+        "supports_erc": [
+          "<string>"
+        ],
+        "logo_url": "<string>"
+      },
+      "date": "2023-11-07T05:31:56Z",
+      "price": 123,
+      "pretty_price": "<string>"
+    }
+  ],
+  "items": [
+    {}
+  ]
+}
+
+- Get gas prices
+Get real-time gas estimates for different transaction speeds on a specific network, enabling users to optimize transaction costs and confirmation times.
+https://api.covalenthq.com/v1/{chainName}/event/{eventType}/gas_prices/
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form: Bearer <token>, where <token> is your GoldRush API Key.
+
+Path Parameters
+​
+chainName
+stringrequired
+The chain name eg: eth-mainnet.
+
+​
+eventType
+stringrequired
+The desired event type to retrieve gas prices for. Supports erc20 transfer events, uniswapv3 swap events and nativetokens transfers.
+
+Query Parameters
+​
+quote-currency
+string
+The currency to convert. Supports USD, CAD, EUR, SGD, INR, JPY, VND, CNY, KRW, RUB, TRY, NGN, ARS, AUD, CHF, and GBP.
+
+Response
+200 - application/json
+Successful response
+
+​
+chain_id
+integer
+The requested chain ID eg: 1.
+
+​
+chain_name
+string
+The requested chain name eg: eth-mainnet.
+
+​
+quote_currency
+string
+The requested quote currency eg: USD.
+
+​
+updated_at
+string<date-time>
+The timestamp when the response was generated. Useful to show data staleness to users.
+
+​
+event_type
+string
+The requested event type.
+
+​
+gas_quote_rate
+number<double>
+The exchange rate for the requested quote currency.
+
+​
+base_fee
+string
+b;The lowest gas fee for the latest block height.
+
+​
+items
+object[]
+List of response items.
+
+200:
+{
+  "chain_id": 123,
+  "chain_name": "<string>",
+  "quote_currency": "<string>",
+  "updated_at": "2023-11-07T05:31:56Z",
+  "event_type": "<string>",
+  "gas_quote_rate": 123,
+  "base_fee": "<string>",
+  "items": [
+    {
+      "gas_price": "<string>",
+      "gas_spent": "<string>",
+      "gas_quote": 123,
+      "other_fees": {
+        "l_1_gas_quote": 123
+      },
+      "total_gas_quote": 123,
+      "pretty_total_gas_quote": "<string>",
+      "interval": "<string>"
+    }
+  ]
+}
