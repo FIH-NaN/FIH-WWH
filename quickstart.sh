@@ -14,7 +14,7 @@ if [ ! -d ".venv" ]; then
     python3 -m venv .venv
 fi
 
-source .venv/bin/activate
+source .venv/Scripts/activate
 echo "✓ Virtual environment activated"
 
 # Install backend dependencies
@@ -28,9 +28,10 @@ echo "  Dependencies installed"
 # Setup environment file
 echo ""
 echo "✓ Setting up environment..."
-if [ ! -f "src/server/.env" ]; then
-    cp src/server/.env.example src/server/.env
-    echo "  Created .env file (edit with your settings)"
+if [ ! -f ".env" ]; then
+    cp src/server/.env.example .env
+    echo "  Created .env at project root"
+    echo "  IMPORTANT: set GOLDRUSH_API_KEY in .env for wallet balances_v2 sync"
 fi
 
 # Install frontend dependencies
