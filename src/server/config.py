@@ -1,6 +1,10 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 import os
+
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+SERVER_ROOT = os.path.dirname(__file__)
 
 
 class Settings(BaseSettings):
@@ -37,9 +41,14 @@ class Settings(BaseSettings):
     ]
     CORS_ORIGIN_REGEX: str = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$|https://.*\.github\.dev$|https://.*\.app\.github\.dev$"
 
-    class Config:
-        env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=(
+            os.path.join(PROJECT_ROOT, ".env"),
+            os.path.join(SERVER_ROOT, ".env"),
+        ),
+        case_sensitive=True,
+        extra="ignore",
+    )
 
 
 @lru_cache()
