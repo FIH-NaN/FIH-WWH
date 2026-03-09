@@ -10,6 +10,7 @@ from src.server.db.tables.user import User
 from src.server.db.tables.wallet import AccountConnection, AccountProvider, ExternalHolding, SyncJob
 from src.server.routers.web_view_model.schemas import (
     AccountConnectRequest,
+    PlaidLinkTokenResponse,
     AccountSyncRequest,
     AccountSyncStatusResponse,
     AccountSyncTriggerResponse,
@@ -21,6 +22,8 @@ from src.server.routers.web_view_model.schemas import (
     WalletSummaryPayload,
 )
 from src.server.services.auth.security import get_current_user
+from src.server.services.wallet_sync.constants import MIN_VISIBLE_TOKEN_USD
+from src.server.services.wallet_sync.providers import create_plaid_link_token
 from src.server.services.wallet_sync.sync_service import SyncService
 
 
@@ -72,6 +75,24 @@ def connect_account(
         )
 
     return SuccessResponse(success=True, data={"accounts": data})
+
+
+@router.get("/plaid/link-token", response_model=SuccessResponse)
+def get_plaid_link_token(user: User = Depends(get_current_user)):
+    try:
+        payload = create_plaid_link_token(user_id=int(getattr(user, "id")))
+        result = PlaidLinkTokenResponse(
+            link_token=str(payload.get("link_token") or ""),
+            expiration=payload.get("expiration"),
+            request_id=payload.get("request_id"),
+        )
+        if not result.link_token:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Failed to create Plaid link token")
+        return SuccessResponse(success=True, data=result.model_dump())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Plaid link token error: {str(exc)}") from exc
 
 
 @router.get("", response_model=SuccessResponse)
@@ -231,20 +252,23 @@ def wallet_summary(
 ):
     rows = db.query(AccountConnection).filter(
         AccountConnection.user_id == user.id,
-        AccountConnection.provider == AccountProvider.EVM,
     ).order_by(AccountConnection.last_synced_at.desc(), AccountConnection.created_at.desc()).all()
 
     wallet_items: list[WalletSummaryItem] = []
     total_portfolio = 0.0
     for row in rows:
+        provider_value = row.provider.value if hasattr(row.provider, "value") else str(row.provider)
         holdings = db.query(ExternalHolding).filter(
             ExternalHolding.user_id == user.id,
             ExternalHolding.account_connection_id == row.id,
+            ExternalHolding.value_usd >= MIN_VISIBLE_TOKEN_USD,
         ).all()
 
         total_value_usd = sum(float(getattr(item, "value_usd") or 0.0) for item in holdings)
         chain_keys = set()
         for item in holdings:
+            if provider_value != AccountProvider.EVM.value:
+                continue
             payload = _parse_holding_payload(getattr(item, "raw_payload"))
             chain_data = payload.get("chain", {}) if isinstance(payload.get("chain"), dict) else {}
             chain_name = str(chain_data.get("chain_name") or "unknown")
@@ -296,9 +320,13 @@ def wallet_holdings(
     if not connection:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet account not found")
 
+    connection_provider = getattr(connection, "provider")
+    is_plaid = connection_provider == AccountProvider.PLAID
+
     holdings = db.query(ExternalHolding).filter(
         ExternalHolding.user_id == user.id,
         ExternalHolding.account_connection_id == account_id,
+        ExternalHolding.value_usd >= MIN_VISIBLE_TOKEN_USD,
     ).order_by(ExternalHolding.value_usd.desc()).all()
 
     groups: dict[tuple[str, int | None], list[WalletHoldingItem]] = defaultdict(list)
@@ -307,15 +335,25 @@ def wallet_holdings(
 
     for row in holdings:
         payload = _parse_holding_payload(getattr(row, "raw_payload"))
-        chain_data = payload.get("chain", {}) if isinstance(payload.get("chain"), dict) else {}
-        chain_name = str(chain_data.get("chain_name") or "unknown")
-        chain_id_raw = chain_data.get("chain_id")
-        try:
-            chain_id = int(chain_id_raw) if chain_id_raw is not None else None
-        except (TypeError, ValueError):
+        if is_plaid:
+            account_data = payload.get("account", {}) if isinstance(payload.get("account"), dict) else payload
+            plaid_type = str(account_data.get("type") or "account")
+            plaid_subtype = str(account_data.get("subtype") or "").strip()
+            group_suffix = plaid_subtype.title() if plaid_subtype else plaid_type.title()
+            chain_name = f"Plaid {group_suffix}"
             chain_id = None
+            token_data = account_data
+        else:
+            chain_data = payload.get("chain", {}) if isinstance(payload.get("chain"), dict) else {}
+            chain_name = str(chain_data.get("chain_name") or "unknown")
+            chain_id_raw = chain_data.get("chain_id")
+            try:
+                chain_id = int(chain_id_raw) if chain_id_raw is not None else None
+            except (TypeError, ValueError):
+                chain_id = None
 
-        token_data = payload.get("token", {}) if isinstance(payload.get("token"), dict) else {}
+            token_data = payload.get("token", {}) if isinstance(payload.get("token"), dict) else {}
+
         logo_urls_obj = token_data.get("logo_urls")
         logo_urls = logo_urls_obj if isinstance(logo_urls_obj, dict) else {}
         logo_url = str(

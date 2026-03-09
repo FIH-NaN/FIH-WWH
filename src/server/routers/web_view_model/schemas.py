@@ -7,12 +7,21 @@ from pydantic import Field
 
 # Enums
 class AssetTypeEnum(str, Enum):
-    CASH = "cash"
+    DEPOSIT_ACCOUNT = "deposit_account"
     STOCK = "stock"
-    FUND = "fund"
-    CRYPTO = "crypto"
-    PROPERTY = "property"
+    ETF = "etf"
+    MUTUAL_FUND = "mutual_fund"
+    BOND = "bond"
+    REAL_ESTATE = "real_estate"
+    COMMODITY = "commodity"
+    DIGITAL_ASSET = "digital_asset"
+    CASH = "cash"
     OTHER = "other"
+
+    # Legacy values kept for backward compatibility with existing clients.
+    CRYPTO = "crypto"
+    FUND = "fund"
+    PROPERTY = "property"
 
 
 class TransactionTypeEnum(str, Enum):
@@ -165,6 +174,112 @@ class HealthScore(BaseModel):
     factors: List[HealthScoreFactor]
 
 
+class WellnessFactor(BaseModel):
+    name: str
+    score: int
+    weight: float
+    detail: str
+
+
+class AllocationSlice(BaseModel):
+    bucket: str
+    value_usd: float
+    weight_pct: float
+
+
+class DataQualitySnapshot(BaseModel):
+    connected_accounts: int
+    holdings_count: int
+    manual_assets_count: int
+    last_synced_at: Optional[str] = None
+
+
+class WealthOverviewPayload(BaseModel):
+    total_portfolio_usd: float
+    overall_score: int
+    grade: str
+    factors: List[WellnessFactor]
+    allocation: List[AllocationSlice]
+    recommendations: List[str]
+    insight_source: str = "pending"
+    insight_provider: str = "minimax"
+    insight_error: Optional[str] = None
+    data_quality: DataQualitySnapshot
+
+
+class WealthInsightsPayload(BaseModel):
+    recommendations: List[str] = Field(default_factory=list)
+    insight_source: str = "cached"
+    insight_provider: str = "minimax"
+    insight_status: str = "success"
+    insight_error: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    duration_ms: Optional[int] = None
+
+
+class WealthInsightsHistoryItem(BaseModel):
+    id: int
+    insight_source: str = "cached"
+    insight_provider: str = "minimax"
+    insight_status: str = "success"
+    recommendations: List[str] = Field(default_factory=list)
+    insight_error: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    duration_ms: Optional[int] = None
+
+
+class WealthInsightsHistoryPayload(BaseModel):
+    items: List[WealthInsightsHistoryItem] = Field(default_factory=list)
+
+
+class PortfolioCompositionItem(BaseModel):
+    bucket: str
+    label: str
+    value_usd: float
+    weight_pct: float
+    color: str
+
+
+class PortfolioPerformancePoint(BaseModel):
+    month_key: str
+    month: str
+    total_value_usd: float
+    income_usd: float = 0.0
+    expense_usd: float = 0.0
+    pnl_usd: float
+    pnl_pct: float
+
+
+class FrontierPoint(BaseModel):
+    risk: float
+    return_: float = Field(alias="return")
+
+    class Config:
+        populate_by_name = True
+
+
+class PortfolioPosition(BaseModel):
+    risk: float
+    return_: float = Field(alias="return")
+    name: str
+
+    class Config:
+        populate_by_name = True
+
+
+class PortfolioAnalysisPayload(BaseModel):
+    total_value_usd: float
+    ytd_pnl_usd: float
+    avg_monthly_pnl_usd: float
+    performance_source: str = "snapshots"
+    composition: List[PortfolioCompositionItem]
+    performance_12m: List[PortfolioPerformancePoint]
+    efficient_frontier: List[FrontierPoint]
+    sub_optimal_points: List[FrontierPoint]
+    user_position: PortfolioPosition
+    optimization_insight: str
+
+
 # ==================== Response Wrappers ====================
 class SuccessResponse(BaseModel):
     success: bool
@@ -204,6 +319,12 @@ class AccountSyncRequest(BaseModel):
 class AccountSyncTriggerResponse(BaseModel):
     job_id: int
     status: str
+
+
+class PlaidLinkTokenResponse(BaseModel):
+    link_token: str
+    expiration: Optional[str] = None
+    request_id: Optional[str] = None
 
 
 class AccountSyncStatusResponse(BaseModel):

@@ -4,6 +4,7 @@ import type {
   AccountsListPayload,
   ApiEnvelope,
   ConnectAccountInput,
+  PlaidLinkTokenPayload,
   SyncMode,
   SyncStatusPayload,
   SyncTriggerPayload,
@@ -21,6 +22,10 @@ export async function connectAccount(token: string, payload: ConnectAccountInput
     token,
     body: payload,
   })
+}
+
+export async function createPlaidLinkToken(token: string) {
+  return apiRequest<ApiEnvelope<PlaidLinkTokenPayload>>('/accounts/plaid/link-token', { token })
 }
 
 export async function disconnectAccount(token: string, id: number) {

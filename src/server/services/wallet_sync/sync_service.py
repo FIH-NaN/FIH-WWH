@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -18,15 +19,20 @@ from src.server.db.tables.wallet import (
     SyncJob,
     SyncJobStatus,
 )
+from src.server.db.tables.plaid_transactions import PlaidTransaction
 from src.server.services.wallet_sync.providers import (
     EvmHoldingsResult,
     ProviderError,
     exchange_plaid_public_token,
     fetch_evm_holdings,
+    fetch_plaid_investment_holdings,
     fetch_plaid_holdings,
+    fetch_plaid_transactions_sync,
+    parse_transaction_date,
     serialize_payload,
     validate_evm_address,
 )
+from src.server.services.financial_analysis.wellness_metrics import WellnessMetricsService
 
 
 class SyncService:
@@ -34,6 +40,37 @@ class SyncService:
     def _enum_value(value: object) -> str:
         enum_value = getattr(value, "value", None)
         return str(enum_value) if enum_value is not None else str(value)
+
+    @staticmethod
+    def _resolve_asset_category(provider_value: str, connection_account_type: str, raw_payload: object) -> AssetCategory:
+        if provider_value == AccountProvider.EVM.value:
+            return AssetCategory.DIGITAL_ASSET
+
+        if provider_value == AccountProvider.PLAID.value:
+            if isinstance(raw_payload, dict):
+                security_type = str(raw_payload.get("security_type") or "").strip().lower()
+                security_subtype = str(raw_payload.get("security_subtype") or "").strip().lower()
+                if security_type in {"fixed income", "fixed_income"} or security_subtype in {"bond", "bill"}:
+                    return AssetCategory.BOND
+                if security_type in {"equity", "etf", "mutual fund", "mutual_fund"}:
+                    return AssetCategory.STOCK
+                if security_type == "cash":
+                    return AssetCategory.CASH
+                if security_type == "cryptocurrency":
+                    return AssetCategory.DIGITAL_ASSET
+
+                account = raw_payload.get("account") if isinstance(raw_payload.get("account"), dict) else raw_payload
+                plaid_type = str((account or {}).get("type") or "").strip().lower()
+                if plaid_type in {"investment", "brokerage", "securities"}:
+                    return AssetCategory.STOCK
+                if plaid_type in {"depository", "cash", "bank"}:
+                    return AssetCategory.CASH
+
+            if connection_account_type == AccountType.BROKERAGE.value:
+                return AssetCategory.STOCK
+            return AssetCategory.CASH
+
+        return AssetCategory.OTHER
 
     @staticmethod
     def connect_account(db: Session, user: User, provider: str, account_type: str, credentials: Optional[dict]) -> List[AccountConnection]:
@@ -130,6 +167,103 @@ class SyncService:
         raise ValueError("Unsupported provider")
 
     @staticmethod
+    def _load_plaid_cursor(db: Session, connection_id: int) -> str | None:
+        row = db.query(AccountCredential).filter(
+            AccountCredential.connection_id == connection_id,
+            AccountCredential.credential_type == "plaid_transactions_cursor",
+        ).first()
+        if not row:
+            return None
+        value = str(getattr(row, "value") or "").strip()
+        return value or None
+
+    @staticmethod
+    def _store_plaid_cursor(db: Session, connection_id: int, cursor: str) -> None:
+        row = db.query(AccountCredential).filter(
+            AccountCredential.connection_id == connection_id,
+            AccountCredential.credential_type == "plaid_transactions_cursor",
+        ).first()
+        if row:
+            setattr(row, "value", cursor)
+            return
+
+        db.add(
+            AccountCredential(
+                connection_id=connection_id,
+                credential_type="plaid_transactions_cursor",
+                value=cursor,
+            )
+        )
+
+    @staticmethod
+    def _sync_plaid_transactions(db: Session, user_id: int, connection_id: int, connection: AccountConnection) -> None:
+        cursor = SyncService._load_plaid_cursor(db=db, connection_id=connection_id)
+        has_more = True
+        next_cursor = cursor
+
+        while has_more:
+            result = fetch_plaid_transactions_sync(connection=connection, cursor=next_cursor)
+            added = result.get("added") if isinstance(result.get("added"), list) else []
+            modified = result.get("modified") if isinstance(result.get("modified"), list) else []
+            removed = result.get("removed") if isinstance(result.get("removed"), list) else []
+            has_more = bool(result.get("has_more"))
+            next_cursor_raw = result.get("next_cursor")
+            next_cursor = str(next_cursor_raw).strip() if next_cursor_raw is not None else next_cursor
+
+            for item in added + modified:
+                if not isinstance(item, dict):
+                    continue
+
+                transaction_id = str(item.get("transaction_id") or "").strip()
+                if not transaction_id:
+                    continue
+
+                category = item.get("personal_finance_category")
+                primary = ""
+                if isinstance(category, dict):
+                    primary = str(category.get("primary") or "")
+
+                row = db.query(PlaidTransaction).filter(
+                    PlaidTransaction.account_connection_id == connection_id,
+                    PlaidTransaction.transaction_id == transaction_id,
+                ).first()
+
+                if row is None:
+                    row = PlaidTransaction(
+                        user_id=user_id,
+                        account_connection_id=connection_id,
+                        transaction_id=transaction_id,
+                    )
+                    db.add(row)
+
+                row.account_id = str(item.get("account_id") or "") or None
+                row.date_posted = parse_transaction_date(item.get("date"))
+                row.amount = float(item.get("amount") or 0.0)
+                row.currency = str(item.get("iso_currency_code") or "USD")
+                row.name = str(item.get("name") or "")
+                row.merchant_name = str(item.get("merchant_name") or "") or None
+                row.category_primary = primary or None
+                row.pending = bool(item.get("pending"))
+                row.is_removed = False
+                row.raw_payload = json.dumps(item)
+
+            for item in removed:
+                if not isinstance(item, dict):
+                    continue
+                transaction_id = str(item.get("transaction_id") or "").strip()
+                if not transaction_id:
+                    continue
+                row = db.query(PlaidTransaction).filter(
+                    PlaidTransaction.account_connection_id == connection_id,
+                    PlaidTransaction.transaction_id == transaction_id,
+                ).first()
+                if row:
+                    row.is_removed = True
+
+        if next_cursor:
+            SyncService._store_plaid_cursor(db=db, connection_id=connection_id, cursor=next_cursor)
+
+    @staticmethod
     def create_sync_job(db: Session, user_id: int, account_id: Optional[int], mode: str = "quick") -> SyncJob:
         sync_mode = (mode or "quick").strip().lower()
         if sync_mode not in {"quick", "deep"}:
@@ -188,7 +322,26 @@ class SyncService:
                     chains_scanned += len(result.scanned_chains)
                     warnings.extend([f"connection:{connection_id}:{item}" for item in result.warnings])
                 elif provider_value == AccountProvider.PLAID.value:
-                    holdings = fetch_plaid_holdings(connection)
+                    balance_holdings = fetch_plaid_holdings(connection)
+                    try:
+                        investment_holdings = fetch_plaid_investment_holdings(connection)
+                    except Exception as exc:
+                        investment_holdings = []
+                        warnings.append(f"connection:{connection_id}:investments_holdings:{str(exc)}")
+                    by_id = {item.external_holding_id: item for item in balance_holdings}
+                    for inv in investment_holdings:
+                        by_id[inv.external_holding_id] = inv
+                    holdings = list(by_id.values())
+
+                    try:
+                        SyncService._sync_plaid_transactions(
+                            db=db,
+                            user_id=job_user_id,
+                            connection_id=connection_id,
+                            connection=connection,
+                        )
+                    except Exception as exc:
+                        warnings.append(f"connection:{connection_id}:transactions_sync:{str(exc)}")
                 else:
                     continue
 
@@ -214,10 +367,23 @@ class SyncService:
                                 setattr(linked_asset, "value", item.value_usd)
                                 setattr(linked_asset, "currency", item.currency)
                                 setattr(linked_asset, "name", item.name)
+                                setattr(
+                                    linked_asset,
+                                    "asset_type",
+                                    SyncService._resolve_asset_category(
+                                        provider_value,
+                                        connection_account_type,
+                                        item.raw_payload,
+                                    ),
+                                )
                         updated_assets += 1
                         tokens_imported += 1
                     else:
-                        asset_type = AssetCategory.DIGITAL_ASSET if connection_account_type == AccountType.CRYPTO_WALLET.value else AssetCategory.CASH
+                        asset_type = SyncService._resolve_asset_category(
+                            provider_value,
+                            connection_account_type,
+                            item.raw_payload,
+                        )
                         asset = Asset(
                             id=get_next_asset_id(db, job_user_id),
                             user_id=job_user_id,
@@ -250,6 +416,8 @@ class SyncService:
 
                 setattr(connection, "last_synced_at", datetime.utcnow())
                 setattr(connection, "last_error", None)
+
+            WellnessMetricsService.record_daily_snapshot(db=db, user_id=job_user_id, source="sync")
 
             setattr(job, "status", SyncJobStatus.SUCCESS)
             setattr(job, "completed_at", datetime.utcnow())

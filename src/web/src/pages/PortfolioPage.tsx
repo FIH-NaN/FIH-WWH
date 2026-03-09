@@ -1,63 +1,51 @@
-import { TrendingUp } from 'lucide-react'
+import { AlertCircle, TrendingUp } from 'lucide-react'
 import Plot from 'react-plotly.js'
+import { useEffect, useMemo, useState } from 'react'
 import { formatMoney } from '../lib/format'
-
-// Mock data for portfolio composition
-const portfolioComposition = [
-  { name: 'Stocks', value: 45000, percentage: 35, color: '#14b8a6' },
-  { name: 'Bonds', value: 32000, percentage: 25, color: '#2563eb' },
-  { name: 'Crypto', value: 26000, percentage: 20, color: '#f59e0b' },
-  { name: 'Real Estate', value: 19000, percentage: 15, color: '#8b5cf6' },
-  { name: 'Cash', value: 6500, percentage: 5, color: '#64748b' },
-]
-
-// Mock data for 12-month profit/loss
-const profitLossData = [
-  { month: 'Jan', value: 2400 },
-  { month: 'Feb', value: -800 },
-  { month: 'Mar', value: 3200 },
-  { month: 'Apr', value: 1600 },
-  { month: 'May', value: 4800 },
-  { month: 'Jun', value: 2100 },
-  { month: 'Jul', value: -1200 },
-  { month: 'Aug', value: 3800 },
-  { month: 'Sep', value: 2900 },
-  { month: 'Oct', value: 5200 },
-  { month: 'Nov', value: 1800 },
-  { month: 'Dec', value: 4100 },
-]
-
-// Mock data for efficient frontier
-// Points on the efficient frontier curve
-const efficientFrontierData = [
-  { risk: 5, return: 3 },
-  { risk: 8, return: 5 },
-  { risk: 10, return: 6.5 },
-  { risk: 12, return: 7.8 },
-  { risk: 15, return: 9 },
-  { risk: 18, return: 10 },
-  { risk: 20, return: 10.8 },
-  { risk: 23, return: 11.5 },
-  { risk: 25, return: 12 },
-  { risk: 28, return: 12.3 },
-  { risk: 30, return: 12.5 },
-]
-
-// User's current portfolio position
-const userPosition = { risk: 17, return: 8.5, name: 'Your Portfolio' }
-
-// Sub-optimal portfolios (below the efficient frontier)
-const subOptimalPoints = [
-  { risk: 12, return: 5 },
-  { risk: 15, return: 6 },
-  { risk: 20, return: 7 },
-  { risk: 25, return: 9 },
-]
+import { getPortfolioAnalysis } from '../services/assetsService'
+import { useAuth } from '../state/AuthContext'
+import type { PortfolioAnalysisPayload } from '../types/models'
 
 function PortfolioPage() {
-  const totalValue = portfolioComposition.reduce((sum, item) => sum + item.value, 0)
-  const totalProfitLoss = profitLossData.reduce((sum, item) => sum + item.value, 0)
-  const avgMonthlyReturn = (totalProfitLoss / profitLossData.length).toFixed(0)
+  const { token } = useAuth()
+  const [analysis, setAnalysis] = useState<PortfolioAnalysisPayload | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const load = async () => {
+      if (!token) return
+      setLoading(true)
+      setError('')
+      try {
+        const response = await getPortfolioAnalysis(token)
+        setAnalysis(response.data)
+      } catch (requestError) {
+        setError(requestError instanceof Error ? requestError.message : 'Failed to load portfolio analysis')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    const refresh = () => {
+      void load()
+    }
+
+    void load()
+    window.addEventListener('wwh:assets-updated', refresh)
+    return () => window.removeEventListener('wwh:assets-updated', refresh)
+  }, [token])
+
+  const composition = useMemo(() => analysis?.composition ?? [], [analysis])
+  const performance = useMemo(() => analysis?.performance_12m ?? [], [analysis])
+  const frontier = useMemo(() => analysis?.efficient_frontier ?? [], [analysis])
+  const subOptimal = useMemo(() => analysis?.sub_optimal_points ?? [], [analysis])
+
+  const totalValue = analysis?.total_value_usd ?? 0
+  const totalProfitLoss = analysis?.ytd_pnl_usd ?? 0
+  const avgMonthlyReturn = analysis?.avg_monthly_pnl_usd ?? 0
+  const userPosition = analysis?.user_position ?? { risk: 0, return: 0, name: 'Your Portfolio' }
+  const performanceSource = analysis?.performance_source ?? 'snapshots'
 
   return (
     <section className="space-y-4">
@@ -73,6 +61,12 @@ function PortfolioPage() {
         </div>
       </div>
 
+      {error ? (
+        <p className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <AlertCircle size={14} /> {error}
+        </p>
+      ) : null}
+
       <div className="grid gap-4 xl:grid-cols-2">
         {/* Portfolio Composition - Interactive Pie Chart */}
         <article className="glass-panel p-5">
@@ -86,10 +80,10 @@ function PortfolioPage() {
               data={[
                 {
                   type: 'pie',
-                  labels: portfolioComposition.map((item) => item.name),
-                  values: portfolioComposition.map((item) => item.value),
+                  labels: composition.map((item) => item.label),
+                  values: composition.map((item) => item.value_usd),
                   marker: {
-                    colors: portfolioComposition.map((item) => item.color),
+                    colors: composition.map((item) => item.color),
                   },
                   textinfo: 'label+percent',
                   textposition: 'outside',
@@ -121,18 +115,21 @@ function PortfolioPage() {
             />
 
             <div className="w-full space-y-1.5">
-              {portfolioComposition.map((item) => (
-                <div key={item.name} className="flex items-center justify-between gap-3 text-sm">
+              {composition.map((item) => (
+                <div key={item.bucket} className="flex items-center justify-between gap-3 text-sm">
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: item.color }} />
-                    <span className="text-slate-700">{item.name}</span>
+                    <span className="text-slate-700">{item.label}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="font-semibold text-slate-900">{formatMoney(item.value)}</span>
-                    <span className="w-10 text-right text-slate-500">{item.percentage}%</span>
+                    <span className="font-semibold text-slate-900">{formatMoney(item.value_usd)}</span>
+                    <span className="w-10 text-right text-slate-500">{item.weight_pct}%</span>
                   </div>
                 </div>
               ))}
+              {!composition.length && !loading ? (
+                <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No composition data yet.</p>
+              ) : null}
             </div>
           </div>
         </article>
@@ -143,12 +140,13 @@ function PortfolioPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">12-Month Performance</h2>
               <p className="text-sm text-slate-500">Monthly profit and loss trend</p>
+              <p className="text-xs text-slate-500">Source: {performanceSource === 'transactions' ? 'Plaid transactions' : 'Portfolio snapshots'}</p>
             </div>
             <div className="text-right">
               <p className="text-xs uppercase tracking-wider text-slate-500">Avg Monthly</p>
               <p className="font-display text-xl font-semibold text-slate-900">
-                {Number(avgMonthlyReturn) > 0 ? '+' : ''}
-                {formatMoney(Number(avgMonthlyReturn))}
+                {avgMonthlyReturn > 0 ? '+' : ''}
+                {formatMoney(avgMonthlyReturn)}
               </p>
             </div>
           </div>
@@ -156,8 +154,8 @@ function PortfolioPage() {
           <Plot
             data={[
               {
-                x: profitLossData.map((d) => d.month),
-                y: profitLossData.map((d) => d.value),
+                x: performance.map((d) => d.month),
+                y: performance.map((d) => d.pnl_usd),
                 type: 'scatter',
                 mode: 'lines',
                 fill: 'tozeroy',
@@ -194,6 +192,12 @@ function PortfolioPage() {
             }}
             className="w-full"
           />
+          {performanceSource === 'transactions' && performance.length ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Latest month income {formatMoney(performance[performance.length - 1].income_usd)} / expense {formatMoney(performance[performance.length - 1].expense_usd)}
+            </p>
+          ) : null}
+          {loading ? <p className="mt-2 text-xs text-slate-500">Loading 12-month performance...</p> : null}
         </article>
       </div>
 
@@ -210,8 +214,8 @@ function PortfolioPage() {
           data={[
             // Sub-optimal portfolios
             {
-              x: subOptimalPoints.map((d) => d.risk),
-              y: subOptimalPoints.map((d) => d.return),
+              x: subOptimal.map((d) => d.risk),
+              y: subOptimal.map((d) => d.return),
               type: 'scatter',
               mode: 'markers',
               name: 'Sub-optimal',
@@ -225,8 +229,8 @@ function PortfolioPage() {
             },
             // Efficient Frontier curve
             {
-              x: efficientFrontierData.map((d) => d.risk),
-              y: efficientFrontierData.map((d) => d.return),
+              x: frontier.map((d) => d.risk),
+              y: frontier.map((d) => d.return),
               type: 'scatter',
               mode: 'lines+markers',
               name: 'Efficient Frontier',
@@ -338,11 +342,9 @@ function PortfolioPage() {
         </div>
 
         <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4">
-          <p className="text-sm font-semibold text-teal-900">💡 Optimization Insight</p>
+          <p className="text-sm font-semibold text-teal-900">Optimization Insight</p>
           <p className="mt-1 text-sm text-teal-800">
-            Your portfolio is currently below the efficient frontier. Consider rebalancing to achieve a better
-            risk-return profile. You could potentially achieve a 10% return with similar risk, or maintain your 8.5%
-            return with only 12% risk.
+            {analysis?.optimization_insight ?? 'Sync your accounts to unlock optimization guidance.'}
           </p>
         </div>
       </article>

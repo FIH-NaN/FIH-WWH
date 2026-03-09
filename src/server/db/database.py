@@ -37,7 +37,7 @@ def init_db():
     """
     Initialize database tables.
     """
-    from src.server.db.tables import assets, cash_flow, transaction, user, wallet  # noqa: F401
+    from src.server.db.tables import assets, cash_flow, insights, plaid_transactions, portfolio_snapshot, transaction, user, wallet  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _ensure_sync_job_columns()
