@@ -1,9 +1,12 @@
-import { AlertTriangle, Loader2, RefreshCw, Wallet } from 'lucide-react'
+import { AlertTriangle, Building2, Loader2, Plus, RefreshCw, Wallet } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePlaidLink } from 'react-plaid-link'
 import { useAccount, useChainId, useConnect, useDisconnect } from 'wagmi'
-import { connectAccount, getSyncStatus, getWalletHoldings, getWalletsSummary, triggerSync } from '../services/accountsService'
+import { connectAccount, createPlaidLinkToken, getSyncStatus, getWalletHoldings, getWalletsSummary, seedPlaidCurrentMonthDemo, triggerSync } from '../services/accountsService'
+import AddAssetModal from '../features/assets/AddAssetModal'
+import { createAsset, listAssets } from '../services/assetsService'
 import { useAuth } from '../state/AuthContext'
-import type { SyncMode, SyncStatusPayload, WalletHoldingsPayload, WalletSummary } from '../types/models'
+import type { Asset, AssetCreateInput, SyncMode, SyncStatusPayload, WalletHoldingsPayload, WalletSummary } from '../types/models'
 
 function formatUsd(value: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
@@ -40,6 +43,13 @@ function AssetsPage() {
   const [syncMode, setSyncMode] = useState<SyncMode>('quick')
   const [syncStatus, setSyncStatus] = useState<SyncStatusPayload | null>(null)
   const [bindingWallet, setBindingWallet] = useState(false)
+  const [bindingBank, setBindingBank] = useState(false)
+  const [seedingDemo, setSeedingDemo] = useState(false)
+  const [plaidLinkToken, setPlaidLinkToken] = useState('')
+  const [manualAssets, setManualAssets] = useState<Asset[]>([])
+  const [manualAssetsLoading, setManualAssetsLoading] = useState(false)
+  const [addAssetOpen, setAddAssetOpen] = useState(false)
+  const [addingAsset, setAddingAsset] = useState(false)
   const boundAddressesRef = useRef<Set<string>>(new Set())
 
   const activeWallet = useMemo(
@@ -70,6 +80,27 @@ function AssetsPage() {
     }
   }
 
+  const loadManualAssets = async () => {
+    if (!token) return
+    setManualAssetsLoading(true)
+    try {
+      const response = await listAssets(token)
+      const all = response.data.assets
+      const filtered = all.filter((asset) => {
+        const category = String(asset.category ?? '').toLowerCase()
+        const description = String(asset.description ?? '').toLowerCase()
+        const isSyncedCategory = category === 'plaid' || category === 'evm'
+        const isSyncedDescription = description.startsWith('synced from')
+        return !(isSyncedCategory || isSyncedDescription)
+      })
+      setManualAssets(filtered)
+    } catch {
+      setManualAssets([])
+    } finally {
+      setManualAssetsLoading(false)
+    }
+  }
+
   const loadWalletHoldings = async (walletId: number) => {
     if (!token) return
     setHoldingsLoading(true)
@@ -86,6 +117,7 @@ function AssetsPage() {
 
   useEffect(() => {
     void loadWalletSummary()
+    void loadManualAssets()
   }, [token])
 
   useEffect(() => {
@@ -93,6 +125,19 @@ function AssetsPage() {
       void loadWalletHoldings(activeWalletId)
     }
   }, [activeWalletId, token])
+
+  const refreshPlaidLinkToken = async () => {
+    if (!token) return
+    const response = await createPlaidLinkToken(token)
+    setPlaidLinkToken(response.data.link_token)
+  }
+
+  useEffect(() => {
+    if (!token || plaidLinkToken) {
+      return
+    }
+    void refreshPlaidLinkToken()
+  }, [token, plaidLinkToken])
 
   const pollSyncStatus = async (jobId: number) => {
     if (!token) return null
@@ -128,6 +173,7 @@ function AssetsPage() {
       }
 
       await loadWalletSummary()
+      await loadManualAssets()
       if (activeWalletId) {
         await loadWalletHoldings(activeWalletId)
       }
@@ -138,6 +184,88 @@ function AssetsPage() {
       setSyncing(false)
     }
   }
+
+  const handlePlaidSuccess = async (publicToken: string, institutionName?: string) => {
+    if (!token) return
+
+    setBindingBank(true)
+    setError('')
+    setFeedback('')
+    try {
+      const linked = await connectAccount(token, {
+        provider: 'plaid',
+        type: 'bank',
+        credentials: {
+          publicToken,
+          name: institutionName ?? 'Plaid Linked Account',
+        },
+      })
+
+      const first = linked.data.accounts[0]
+      setFeedback('Bank account connected. Running a quick sync...')
+      await handleSync(first?.id, 'quick')
+      setPlaidLinkToken('')
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to connect bank account')
+    } finally {
+      setBindingBank(false)
+    }
+  }
+
+  const handleSeedPlaidDemo = async () => {
+    if (!token) return
+
+    setSeedingDemo(true)
+    setError('')
+    setFeedback('')
+    try {
+      const response = await seedPlaidCurrentMonthDemo(token)
+      const seeded = response.data
+      setFeedback(
+        `Demo seeded via ${seeded.connection_name}. Current month Income ${formatUsd(seeded.current_month_income)}, Expense ${formatUsd(seeded.current_month_expense)}.`,
+      )
+
+      await loadWalletSummary()
+      await loadManualAssets()
+      setActiveWalletId(seeded.connection_id)
+      await loadWalletHoldings(seeded.connection_id)
+      window.dispatchEvent(new Event('wwh:assets-updated'))
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to seed Plaid demo data')
+    } finally {
+      setSeedingDemo(false)
+    }
+  }
+
+  const handleAddManualAsset = async (payload: AssetCreateInput) => {
+    if (!token) return
+    setAddingAsset(true)
+    setError('')
+    try {
+      await createAsset(token, payload)
+      setAddAssetOpen(false)
+      setFeedback('Manual asset added successfully.')
+      await loadManualAssets()
+      window.dispatchEvent(new Event('wwh:assets-updated'))
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to add manual asset')
+    } finally {
+      setAddingAsset(false)
+    }
+  }
+
+  const { open: openPlaidLink, ready: plaidReady } = usePlaidLink({
+    token: plaidLinkToken || null,
+    onSuccess: (publicToken, metadata) => {
+      const institutionName = metadata?.institution?.name ?? undefined
+      void handlePlaidSuccess(publicToken, institutionName)
+    },
+    onExit: (linkError) => {
+      if (linkError) {
+        setError(linkError.display_message ?? linkError.error_message ?? 'Plaid Link exited with an error')
+      }
+    },
+  })
 
   useEffect(() => {
     const bindConnectedWallet = async () => {
@@ -198,7 +326,7 @@ function AssetsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">My Assets</h1>
-            <p className="text-sm text-slate-500">Wallet cards with real GoldRush USD balances and per-network holdings.</p>
+            <p className="text-sm text-slate-500">Unified cards for onchain wallets and linked bank accounts.</p>
             <p className="mt-1 text-xs text-slate-500">Portfolio total: {formatUsd(totalPortfolioUsd)}</p>
           </div>
 
@@ -224,6 +352,26 @@ function AssetsPage() {
               </button>
             ) : null}
 
+            <button
+              type="button"
+              onClick={() => openPlaidLink()}
+              disabled={!plaidReady || bindingBank || syncing || seedingDemo}
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Building2 size={14} />
+              {!plaidLinkToken ? 'Preparing Bank Link...' : plaidReady ? 'Connect Bank' : 'Loading Plaid...'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleSeedPlaidDemo()}
+              disabled={seedingDemo || syncing || bindingBank}
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-medium text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Plus size={14} />
+              {seedingDemo ? 'Seeding Demo...' : 'Seed Plaid Demo Data'}
+            </button>
+
             <select
               className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
               value={syncMode}
@@ -235,11 +383,20 @@ function AssetsPage() {
             <button
               type="button"
               onClick={() => handleSync(activeWalletId ?? undefined)}
-              disabled={syncing || wallets.length === 0}
+              disabled={syncing || wallets.length === 0 || seedingDemo}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
               <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
               {syncing ? 'Syncing...' : 'Sync Active Wallet'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAddAssetOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700"
+            >
+              <Plus size={14} />
+              Add Manual Asset
             </button>
           </div>
         </div>
@@ -251,6 +408,23 @@ function AssetsPage() {
         <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
           Warnings: {syncStatus.warnings.join(' | ')}
         </p>
+      ) : null}
+
+      {import.meta.env.DEV ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+          <p className="font-semibold">Plaid Sandbox Test Hint</p>
+          <p className="mt-1">Use these credentials inside the Plaid Link popup:</p>
+          <p className="font-mono text-xs mt-1">username: user_transactions_dynamic</p>
+          <p className="font-mono text-xs">password: pass_good</p>
+          <a
+            href="https://plaid.com/docs/sandbox/test-credentials/"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-block underline"
+          >
+            Plaid sandbox credentials docs
+          </a>
+        </div>
       ) : null}
 
       <div className="glass-panel p-4">
@@ -267,7 +441,7 @@ function AssetsPage() {
           </div>
         ) : wallets.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
-            No wallet connected yet. Use Connect Wallet to create your first card.
+            No accounts connected yet. Use Connect Wallet or Connect Bank to create your first card.
           </div>
         ) : (
           <div className="flex gap-3 overflow-x-auto pb-2">
@@ -352,6 +526,42 @@ function AssetsPage() {
           <p className="text-sm text-slate-500">No holdings available for this wallet.</p>
         )}
       </div>
+
+      <div className="glass-panel p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Manual Assets</p>
+            <p className="text-xs text-slate-500">Use this section to add Real Estate or other non-Plaid assets.</p>
+          </div>
+          {manualAssetsLoading ? <Loader2 size={16} className="animate-spin text-slate-500" /> : null}
+        </div>
+
+        {manualAssets.length === 0 ? (
+          <p className="text-sm text-slate-500">No manual assets yet. Click Add Manual Asset to add Real Estate, Stocks, Bonds, or Others.</p>
+        ) : (
+          <div className="space-y-2">
+            {manualAssets.map((asset) => (
+              <div key={`${asset.user_id}-${asset.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-slate-900">{asset.name}</p>
+                  <p className="text-xs text-slate-500">{asset.asset_type.replace(/_/g, ' ')}</p>
+                </div>
+                <p className="text-sm font-semibold text-slate-800">{formatUsd(asset.value)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <AddAssetModal
+        open={addAssetOpen}
+        submitting={addingAsset}
+        onClose={() => {
+          if (addingAsset) return
+          setAddAssetOpen(false)
+        }}
+        onSubmit={handleAddManualAsset}
+      />
     </section>
   )
 }

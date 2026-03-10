@@ -2,14 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
-from server.services.auth.security import get_current_user
+from src.server.services.auth.security import get_current_user
 
 from src.server.db.database import get_db
 from src.server.db.tables.transaction import Transaction
 from src.server.db.tables.assets import Asset
 from src.server.db.tables.user import User
 
-from server.routers.web_view_model.schemas import (
+from src.server.routers.web_view_model.schemas import (
     TransactionCreate,
     TransactionResponse,
     TransactionImportRequest,

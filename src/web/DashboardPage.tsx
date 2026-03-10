@@ -1,9 +1,9 @@
 import { Sparkles, TrendingUp, Send, Loader2 } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
-import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useEffect, useState } from 'react'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatMoney } from '../lib/format'
 import { dashboardService } from '../services/dashboardService'
-import type { BalanceSheet, IncomeStatement, AIAdvice } from '../types/models'
+import type { BalanceSheet, IncomeStatement, AIAdvice } from '../services/dashboardService'
 import { useAuth } from '../state/AuthContext'
 
 function DashboardPage() {
@@ -16,17 +16,13 @@ function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [promptInput, setPromptInput] = useState('')
   const [submittingPrompt, setSubmittingPrompt] = useState(false)
-  const [budgetDraft, setBudgetDraft] = useState<Record<string, string>>({})
-  const [savingBudget, setSavingBudget] = useState(false)
-
-  const monthKey = new Date().toISOString().slice(0, 7)
 
   useEffect(() => {
     const fetchData = async () => {
       if (!token) return
       setLoading(true)
       try {
-        const [bs, statement, income, expense, advice] = await Promise.all([
+        const [bs, is, income, expense, advice] = await Promise.all([
           dashboardService.getBalanceSheet(token),
           dashboardService.getIncomeStatement(token),
           dashboardService.getTotalIncome(token),
@@ -34,17 +30,10 @@ function DashboardPage() {
           dashboardService.getDefaultAdvice(token),
         ])
         setBalanceSheet(bs)
-        setIncomeStatement(statement)
+        setIncomeStatement(is)
         setTotalIncome(income)
         setTotalExpense(expense)
         setAiAdvice(advice)
-
-        const budgetPayload = await dashboardService.getBudgets(token, monthKey)
-        const draft: Record<string, string> = {}
-        for (const item of budgetPayload.items ?? []) {
-          draft[`${item.flow_type}:${item.category}`] = String(item.amount)
-        }
-        setBudgetDraft(draft)
       } catch (error) {
         console.error('Error fetching dashboard data:', error)
       } finally {
@@ -53,16 +42,10 @@ function DashboardPage() {
     }
 
     void fetchData()
-
-    const refresh = () => {
-      void fetchData()
-    }
-    window.addEventListener('wwh:assets-updated', refresh)
-    return () => window.removeEventListener('wwh:assets-updated', refresh)
   }, [token])
 
-  const handlePromptSubmit = async (event: FormEvent) => {
-    event.preventDefault()
+  const handlePromptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     if (!token || !promptInput.trim()) return
 
     setSubmittingPrompt(true)
@@ -77,33 +60,6 @@ function DashboardPage() {
     }
   }
 
-  const handleBudgetSave = async () => {
-    if (!token || !incomeStatement) return
-    setSavingBudget(true)
-    try {
-      const categories = [
-        ...incomeStatement.income_items.map((item) => ({ flow_type: 'income' as const, category: item.category })),
-        ...incomeStatement.expense_items.map((item) => ({ flow_type: 'expense' as const, category: item.category })),
-      ]
-      const unique = new Map<string, { flow_type: 'income' | 'expense'; category: string }>()
-      for (const item of categories) {
-        unique.set(`${item.flow_type}:${item.category}`, item)
-      }
-      const payloadItems = [...unique.values()].map((item) => ({
-        flow_type: item.flow_type,
-        category: item.category,
-        amount: Number(budgetDraft[`${item.flow_type}:${item.category}`] ?? 0),
-      }))
-      await dashboardService.saveBudgets(token, monthKey, payloadItems)
-      const refreshed = await dashboardService.getIncomeStatement(token)
-      setIncomeStatement(refreshed)
-    } catch (error) {
-      console.error('Error saving budgets:', error)
-    } finally {
-      setSavingBudget(false)
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -115,25 +71,27 @@ function DashboardPage() {
   const netWorth = balanceSheet?.net_worth ?? 0
   const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome) * 100 : 0
 
+  // Prepare data for stacked bar chart (Balance Sheet)
   const balanceSheetData = [
     {
       name: 'Assets',
-      ...Object.fromEntries((balanceSheet?.assets ?? []).map((item) => [item.category, item.amount])),
+      ...Object.fromEntries(balanceSheet?.assets.map(a => [a.category, a.amount]) ?? []),
     },
     {
       name: 'Liabilities',
-      ...Object.fromEntries((balanceSheet?.liabilities ?? []).map((item) => [item.category, item.amount])),
+      ...Object.fromEntries(balanceSheet?.liabilities.map(l => [l.category, l.amount]) ?? []),
     },
   ]
 
+  // Prepare data for income statement line chart
   const incomeStatementChartData = [
-    ...(incomeStatement?.income_items.map((item) => ({
+    ...(incomeStatement?.income_items.map(item => ({
       category: item.category,
       actual: item.actual,
       budgeted: item.budgeted,
       type: 'Income',
     })) ?? []),
-    ...(incomeStatement?.expense_items.map((item) => ({
+    ...(incomeStatement?.expense_items.map(item => ({
       category: item.category,
       actual: item.actual,
       budgeted: item.budgeted,
@@ -142,10 +100,11 @@ function DashboardPage() {
   ]
 
   const assetColors = ['#14b8a6', '#2563eb', '#f59e0b', '#8b5cf6', '#10b981', '#ec4899']
-  const liabilityColors = ['#ef4444', '#f97316', '#b91c1c', '#7f1d1d']
+  const liabilityColors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16']
 
   return (
     <section className="space-y-4">
+      {/* KPIs */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="glass-panel p-4">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Net Worth</p>
@@ -166,6 +125,7 @@ function DashboardPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
+        {/* Balance Sheet */}
         <article className="glass-panel p-4">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">Balance Sheet</h2>
@@ -180,17 +140,15 @@ function DashboardPage() {
                 <YAxis tick={{ fill: '#64748b', fontSize: 12 }} />
                 <Tooltip formatter={(value) => formatMoney(Number(value))} />
                 <Legend />
-                {(balanceSheet?.assets ?? []).map((asset, idx) => (
+                {balanceSheet?.assets.map((asset, idx) => (
                   <Bar key={asset.category} dataKey={asset.category} stackId="a" fill={assetColors[idx % assetColors.length]} />
-                ))}
-                {(balanceSheet?.liabilities ?? []).map((liability, idx) => (
-                  <Bar key={liability.category} dataKey={liability.category} stackId="l" fill={liabilityColors[idx % liabilityColors.length]} />
                 ))}
               </BarChart>
             </ResponsiveContainer>
           </div>
         </article>
 
+        {/* AI Insights */}
         <article className="rounded-2xl border border-transparent bg-white p-4 shadow-panel [background:linear-gradient(white,white)_padding-box,linear-gradient(135deg,#14b8a6,#2563eb)_border-box]">
           <div className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
             <Sparkles size={13} />
@@ -199,13 +157,17 @@ function DashboardPage() {
           <h3 className="mt-3 font-display text-lg text-slate-900">Financial Advice</h3>
 
           <div className="mt-4 space-y-3">
-            {aiAdvice ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{aiAdvice.advice}</p> : null}
+            {aiAdvice && (
+              <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                {aiAdvice.advice}
+              </p>
+            )}
 
             <form onSubmit={handlePromptSubmit} className="flex gap-2">
               <input
                 type="text"
                 value={promptInput}
-                onChange={(event) => setPromptInput(event.target.value)}
+                onChange={(e) => setPromptInput(e.target.value)}
                 placeholder="Ask for advice..."
                 className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
                 disabled={submittingPrompt}
@@ -222,6 +184,7 @@ function DashboardPage() {
         </article>
       </div>
 
+      {/* Income Statement */}
       <article className="glass-panel p-4">
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -246,63 +209,6 @@ function DashboardPage() {
               <Line type="monotone" dataKey="budgeted" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" name="Budgeted" />
             </LineChart>
           </ResponsiveContainer>
-        </div>
-      </article>
-
-      <article className="glass-panel p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Budget Configuration</h2>
-            <p className="text-sm text-slate-500">Edit Budgeted values for {monthKey}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => handleBudgetSave()}
-            disabled={savingBudget}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {savingBudget ? 'Saving...' : 'Save Budget'}
-          </button>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Income Budgets</p>
-            <div className="space-y-2">
-              {(incomeStatement?.income_items ?? []).map((item) => {
-                const key = `income:${item.category}`
-                return (
-                  <label key={key} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                    <span className="text-slate-700">{item.category}</span>
-                    <input
-                      value={budgetDraft[key] ?? String(item.budgeted ?? 0)}
-                      onChange={(event) => setBudgetDraft((prev) => ({ ...prev, [key]: event.target.value }))}
-                      className="w-28 rounded border border-slate-200 px-2 py-1 text-right"
-                      inputMode="decimal"
-                    />
-                  </label>
-                )
-              })}
-            </div>
-          </div>
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Expense Budgets</p>
-            <div className="space-y-2">
-              {(incomeStatement?.expense_items ?? []).map((item) => {
-                const key = `expense:${item.category}`
-                return (
-                  <label key={key} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                    <span className="text-slate-700">{item.category}</span>
-                    <input
-                      value={budgetDraft[key] ?? String(item.budgeted ?? 0)}
-                      onChange={(event) => setBudgetDraft((prev) => ({ ...prev, [key]: event.target.value }))}
-                      className="w-28 rounded border border-slate-200 px-2 py-1 text-right"
-                      inputMode="decimal"
-                    />
-                  </label>
-                )
-              })}
-            </div>
-          </div>
         </div>
       </article>
     </section>

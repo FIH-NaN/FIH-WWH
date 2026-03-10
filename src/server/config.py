@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     PLAID_REDIRECT_URI: str = ""
     PLAID_TOKEN_ENCRYPTION_KEY: str = ""
     GOLDRUSH_API_KEY: str = ""
+
+    # AI providers
+    MINIMAX_API_KEY: str = ""
+    MINIMAX_MODEL: str = "MiniMax-M2.5"
+    MINIMAX_API_URL: str = "https://api.minimaxi.com/anthropic/v1/messages"
+
     SYNC_JOB_TIMEOUT_SECONDS: int = 300
     SYNC_MAX_RETRIES: int = 3
 

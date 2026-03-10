@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { connectAccount, disconnectAccount, getSyncStatus, listAccounts, triggerSync } from '../services/accountsService'
+import { usePlaidLink } from 'react-plaid-link'
+import { connectAccount, createPlaidLinkToken, disconnectAccount, getSyncStatus, listAccounts, triggerSync } from '../services/accountsService'
 import { useAuth } from '../state/AuthContext'
 import type { AccountConnection, AccountProvider } from '../types/models'
 
@@ -10,6 +11,7 @@ function SettingsPage() {
   const [walletAddress, setWalletAddress] = useState('')
   const [network, setNetwork] = useState('ethereum')
   const [plaidAccessToken, setPlaidAccessToken] = useState('')
+  const [plaidLinkToken, setPlaidLinkToken] = useState('')
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -21,38 +23,22 @@ function SettingsPage() {
     setAccounts(response.data.accounts)
   }
 
+  const refreshPlaidLinkToken = async () => {
+    if (!token) return
+    const response = await createPlaidLinkToken(token)
+    setPlaidLinkToken(response.data.link_token)
+  }
+
   useEffect(() => {
     void refreshAccounts()
   }, [token])
 
-  const handleConnect = async () => {
-    if (!token) {
+  useEffect(() => {
+    if (!token || provider !== 'plaid' || plaidLinkToken) {
       return
     }
-    setBusy(true)
-    setFeedback('')
-    try {
-      if (provider === 'evm') {
-        await connectAccount(token, {
-          provider: 'evm',
-          type: 'crypto_wallet',
-          credentials: { walletAddress, network },
-        })
-      } else {
-        await connectAccount(token, {
-          provider: 'plaid',
-          type: 'bank',
-          credentials: { accessToken: plaidAccessToken },
-        })
-      }
-      setFeedback('Account connected successfully.')
-      await refreshAccounts()
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'Failed to connect account')
-    } finally {
-      setBusy(false)
-    }
-  }
+    void refreshPlaidLinkToken()
+  }, [token, provider, plaidLinkToken])
 
   const handleSync = async (accountId: number) => {
     if (!token) {
@@ -69,7 +55,7 @@ function SettingsPage() {
         if (status === 'success') {
           const warnings = statusResponse.data.warnings.length > 0 ? ` Warnings: ${statusResponse.data.warnings.join(' | ')}` : ''
           setFeedback(
-            `GoldRush sync complete (${statusResponse.data.sync_mode}). New assets: ${statusResponse.data.new_assets_count}, updated: ${statusResponse.data.updated_assets_count}, chains scanned: ${statusResponse.data.chains_scanned}, tokens imported: ${statusResponse.data.tokens_imported}.${warnings}`
+            `Account sync complete (${statusResponse.data.sync_mode}). New assets: ${statusResponse.data.new_assets_count}, updated: ${statusResponse.data.updated_assets_count}, chains scanned: ${statusResponse.data.chains_scanned}, tokens imported: ${statusResponse.data.tokens_imported}.${warnings}`
           )
           await refreshAccounts()
           window.dispatchEvent(new Event('wwh:assets-updated'))
@@ -83,6 +69,83 @@ function SettingsPage() {
       }
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'Failed to sync account')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handlePlaidSuccess = async (publicToken: string, institutionName?: string) => {
+    if (!token) {
+      return
+    }
+
+    setBusy(true)
+    setFeedback('')
+    try {
+      const linked = await connectAccount(token, {
+        provider: 'plaid',
+        type: 'bank',
+        credentials: {
+          publicToken,
+          name: institutionName ?? 'Plaid Linked Account',
+        },
+      })
+
+      const first = linked.data.accounts[0]
+      setFeedback('Plaid account connected. Running quick sync...')
+      if (first?.id) {
+        await handleSync(first.id)
+      }
+      await refreshAccounts()
+      setPlaidLinkToken('')
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Failed to connect Plaid account')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const { open: openPlaidLink, ready: plaidReady } = usePlaidLink({
+    token: plaidLinkToken || null,
+    onSuccess: (publicToken, metadata) => {
+      const institutionName = metadata?.institution?.name ?? undefined
+      void handlePlaidSuccess(publicToken, institutionName)
+    },
+    onExit: (error) => {
+      if (error) {
+        setFeedback(error.display_message ?? error.error_message ?? 'Plaid Link exited with an error')
+      }
+    },
+  })
+
+  const handleConnect = async () => {
+    if (!token) {
+      return
+    }
+    setBusy(true)
+    setFeedback('')
+    try {
+      if (provider === 'evm') {
+        await connectAccount(token, {
+          provider: 'evm',
+          type: 'crypto_wallet',
+          credentials: { walletAddress, network },
+        })
+      } else {
+        if (plaidAccessToken.trim().length === 0) {
+          setFeedback('Use Plaid Link, or provide manual sandbox access token as fallback.')
+          return
+        }
+        await connectAccount(token, {
+          provider: 'plaid',
+          type: 'bank',
+          credentials: { accessToken: plaidAccessToken },
+        })
+      }
+      setFeedback('Account connected successfully.')
+      await refreshAccounts()
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Failed to connect account')
     } finally {
       setBusy(false)
     }
@@ -108,8 +171,8 @@ function SettingsPage() {
   return (
     <section className="space-y-4">
       <div className="glass-panel p-6">
-        <h1 className="font-display text-2xl text-slate-900">Wallet Connections</h1>
-        <p className="mt-2 text-sm text-slate-600">Bind an EVM wallet or Plaid account for one-click portfolio sync.</p>
+        <h1 className="font-display text-2xl text-slate-900">Advanced Connections</h1>
+        <p className="mt-2 text-sm text-slate-600">Primary connect flow now lives in My Assets. Use this page for advanced and fallback linking.</p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-slate-700">
@@ -151,15 +214,29 @@ function SettingsPage() {
               </label>
             </>
           ) : (
-            <label className="text-sm text-slate-700 sm:col-span-2">
-              Plaid Access Token (sandbox)
-              <input
-                value={plaidAccessToken}
-                onChange={(event) => setPlaidAccessToken(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
-                placeholder="access-sandbox-..."
-              />
-            </label>
+            <div className="space-y-3 sm:col-span-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm text-slate-700">Connect TradFi accounts securely via Plaid Link.</p>
+                <button
+                  type="button"
+                  onClick={() => openPlaidLink()}
+                  disabled={!plaidReady || busy}
+                  className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {!plaidLinkToken ? 'Preparing Link...' : plaidReady ? 'Connect via Plaid Link' : 'Loading Plaid Link...'}
+                </button>
+              </div>
+
+              <label className="text-sm text-slate-700">
+                Manual Plaid Access Token (sandbox fallback)
+                <input
+                  value={plaidAccessToken}
+                  onChange={(event) => setPlaidAccessToken(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                  placeholder="access-sandbox-..."
+                />
+              </label>
+            </div>
           )}
         </div>
 

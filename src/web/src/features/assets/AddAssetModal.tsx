@@ -8,7 +8,23 @@ type Props = {
   onSubmit: (payload: AssetCreateInput) => Promise<void>
 }
 
-const ASSET_TYPES: AssetType[] = ['cash', 'stock', 'fund', 'crypto', 'property', 'other']
+const ASSET_TYPES: AssetType[] = ['cash', 'stock', 'bond', 'fund', 'crypto', 'real_estate', 'other']
+
+const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  cash: 'Cash',
+  stock: 'Stock',
+  bond: 'Bond',
+  fund: 'Fund',
+  crypto: 'Crypto',
+  property: 'Property',
+  real_estate: 'Real Estate',
+  digital_asset: 'Digital Asset',
+  deposit_account: 'Deposit Account',
+  etf: 'ETF',
+  mutual_fund: 'Mutual Fund',
+  commodity: 'Commodity',
+  other: 'Other',
+}
 
 const initialState: AssetCreateInput = {
   name: '',
@@ -60,7 +76,7 @@ function AddAssetModal({ open, submitting, onClose, onSubmit }: Props) {
             >
               {ASSET_TYPES.map((type) => (
                 <option key={type} value={type}>
-                  {type.toUpperCase()}
+                  {ASSET_TYPE_LABELS[type] ?? type.toUpperCase()}
                 </option>
               ))}
             </select>

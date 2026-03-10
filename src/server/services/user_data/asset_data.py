@@ -10,6 +10,7 @@ from src.server.db.db_gateway.assets import (
     get_asset_by_id,
 )
 from src.server.core.entities.assets import AssetCategory
+from src.server.services.financial_analysis.wellness_metrics import WellnessMetricsService
 
 
 class UserAssetDataManager:
@@ -234,22 +235,38 @@ class UserAssetDataManager:
 		Returns:
 		    Dictionary with score, grade, and factors
 		"""
-		assets = get_all_assets(db, user_id)
-
-		# Simplified scoring logic
-		diversification_score = min(90, len(assets) * 10) if len(assets) > 0 else 0
-		liquidity_score = 75
-		return_score = 70
-
-		overall_score = int((diversification_score + liquidity_score + return_score) / 3)
-		grade = "A" if overall_score >= 80 else "B" if overall_score >= 70 else "C"
+		overview = WellnessMetricsService.build_overview(db=db, user_id=user_id)
 
 		return {
-			"score": overall_score,
-			"grade": grade,
+			"score": overview["overall_score"],
+			"grade": overview["grade"],
 			"factors": [
-				{"name": "资产分散度", "score": diversification_score},
-				{"name": "流动性", "score": liquidity_score},
-				{"name": "投资回报", "score": return_score},
+				{"name": factor["name"], "score": factor["score"]}
+				for factor in overview["factors"]
 			],
 		}
+
+	@staticmethod
+	def get_wealth_overview(db: Session, user_id: int) -> Dict:
+		"""Get factorized wellness overview for dashboard and advisor surfaces."""
+		return WellnessMetricsService.build_overview(db=db, user_id=user_id)
+
+	@staticmethod
+	def get_wealth_insights(db: Session, user_id: int) -> Dict:
+		"""Get latest cached AI insights only (no model invocation)."""
+		return WellnessMetricsService.build_ai_insights(db=db, user_id=user_id)
+
+	@staticmethod
+	def refresh_wealth_insights(db: Session, user_id: int) -> Dict:
+		"""Manually regenerate AI insights and persist a new history row."""
+		return WellnessMetricsService.refresh_ai_insights(db=db, user_id=user_id)
+
+	@staticmethod
+	def get_wealth_insights_history(db: Session, user_id: int, limit: int = 10) -> Dict:
+		"""List stored AI insights history for longitudinal comparison."""
+		return WellnessMetricsService.list_ai_insights_history(db=db, user_id=user_id, limit=limit)
+
+	@staticmethod
+	def get_portfolio_analysis(db: Session, user_id: int) -> Dict:
+		"""Get portfolio composition, 12-month performance, and frontier analysis."""
+		return WellnessMetricsService.build_portfolio_analysis(db=db, user_id=user_id)

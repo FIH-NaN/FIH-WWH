@@ -1,3 +1,4 @@
+from datetime import date
 import json
 import logging
 import re
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from src.server.config import get_settings
 from src.server.core.secrets import decrypt_secret
 from src.server.db.tables.wallet import AccountConnection, AccountCredential
+from src.server.services.wallet_sync.constants import MIN_VISIBLE_TOKEN_USD
 
 
 logger = logging.getLogger(__name__)
@@ -273,6 +275,10 @@ def fetch_evm_holdings(connection: AccountConnection, mode: str = "quick") -> Ev
                 if amount <= 0 and quote <= 0:
                     continue
 
+                value_usd = quote if quote > 0 else amount * price_usd
+                if value_usd < MIN_VISIBLE_TOKEN_USD:
+                    continue
+
                 symbol = str(item.get("contract_ticker_symbol") or "TOKEN")
                 contract_address = str(item.get("contract_address") or "").lower()
                 holding_id = contract_address or symbol.lower()
@@ -292,7 +298,7 @@ def fetch_evm_holdings(connection: AccountConnection, mode: str = "quick") -> Ev
                         symbol=symbol,
                         amount=amount,
                         price_usd=price_usd,
-                        value_usd=quote if quote > 0 else amount * price_usd,
+                        value_usd=value_usd,
                         currency="USD",
                         chain_name=resolved_chain_name,
                         chain_id=chain_id,
@@ -366,6 +372,31 @@ def exchange_plaid_public_token(public_token: str) -> dict:
     return resp
 
 
+def create_plaid_link_token(user_id: int) -> dict:
+    settings = get_settings()
+    env = settings.PLAID_ENV or "sandbox"
+    base_url = f"https://{env}.plaid.com"
+
+    payload = {
+        "client_id": settings.PLAID_CLIENT_ID,
+        "secret": settings.PLAID_SECRET,
+        "client_name": "Wealth Wellness Hub",
+        "language": "en",
+        "country_codes": ["US"],
+        "user": {"client_user_id": str(user_id)},
+        "products": ["auth", "transactions", "investments", "liabilities"],
+    }
+    if settings.PLAID_REDIRECT_URI:
+        payload["redirect_uri"] = settings.PLAID_REDIRECT_URI
+
+    response = _http_post_json(
+        f"{base_url}/link/token/create",
+        payload,
+        timeout=10,
+    )
+    return response
+
+
 def fetch_plaid_holdings(connection: AccountConnection) -> List[HoldingRecord]:
     settings = get_settings()
     access_token = _get_credential(connection, "plaid_access_token")
@@ -386,8 +417,15 @@ def fetch_plaid_holdings(connection: AccountConnection) -> List[HoldingRecord]:
 
     holdings: List[HoldingRecord] = []
     for account in data.get("accounts", []):
+        account_type = str(account.get("type") or "").strip().lower()
+        if account_type in {"investment", "brokerage", "securities", "credit", "loan", "mortgage"}:
+            continue
+
         balances = account.get("balances", {})
         current_balance = float(balances.get("current") or 0.0)
+        if current_balance <= 0:
+            continue
+
         iso_currency = balances.get("iso_currency_code") or "USD"
         account_id = account.get("account_id")
         account_name = account.get("name") or "Plaid Account"
@@ -401,11 +439,285 @@ def fetch_plaid_holdings(connection: AccountConnection) -> List[HoldingRecord]:
                 price_usd=1.0,
                 value_usd=current_balance,
                 currency=iso_currency,
-                raw_payload=account,
+                raw_payload={
+                    "provider": "plaid",
+                    "account": account,
+                    "item": data.get("item", {}),
+                    "plaid_source": "accounts_balance",
+                },
             )
         )
 
     return holdings
+
+
+def fetch_plaid_accounts(connection: AccountConnection) -> List[dict]:
+    settings = get_settings()
+    access_token = _get_credential(connection, "plaid_access_token")
+    if not access_token:
+        raise ProviderError("Missing Plaid access token for this connection")
+
+    env = settings.PLAID_ENV or "sandbox"
+    base_url = f"https://{env}.plaid.com"
+    data = _http_post_json(
+        f"{base_url}/accounts/get",
+        {
+            "client_id": settings.PLAID_CLIENT_ID,
+            "secret": settings.PLAID_SECRET,
+            "access_token": access_token,
+        },
+        timeout=10,
+    )
+    accounts = data.get("accounts")
+    return accounts if isinstance(accounts, list) else []
+
+
+def fetch_plaid_liabilities(connection: AccountConnection) -> List[dict]:
+    settings = get_settings()
+    access_token = _get_credential(connection, "plaid_access_token")
+    if not access_token:
+        raise ProviderError("Missing Plaid access token for this connection")
+
+    env = settings.PLAID_ENV or "sandbox"
+    base_url = f"https://{env}.plaid.com"
+
+    accounts = fetch_plaid_accounts(connection)
+    account_map = {
+        str(item.get("account_id") or ""): item
+        for item in accounts
+        if isinstance(item, dict)
+    }
+
+    results: List[dict] = []
+
+    # First, try rich liabilities endpoint when product is enabled.
+    try:
+        data = _http_post_json(
+            f"{base_url}/liabilities/get",
+            {
+                "client_id": settings.PLAID_CLIENT_ID,
+                "secret": settings.PLAID_SECRET,
+                "access_token": access_token,
+            },
+            timeout=12,
+        )
+        liabilities_obj = data.get("liabilities") if isinstance(data.get("liabilities"), dict) else {}
+
+        for section_key in ("credit", "student", "mortgage"):
+            section = liabilities_obj.get(section_key)
+            if not isinstance(section, list):
+                continue
+            for item in section:
+                if not isinstance(item, dict):
+                    continue
+                account_id = str(item.get("account_id") or "")
+                account = account_map.get(account_id, {})
+                subtype = str((account or {}).get("subtype") or section_key)
+                liability_type = "credit" if section_key == "credit" else "loan"
+
+                current_balance = 0.0
+                if section_key == "credit":
+                    current_balance = _parse_float(item.get("last_statement_balance"))
+                else:
+                    current_balance = _parse_float(item.get("outstanding_principal_balance"))
+
+                if current_balance <= 0:
+                    current_balance = _parse_float(((account or {}).get("balances") or {}).get("current"))
+                if current_balance <= 0:
+                    continue
+
+                results.append(
+                    {
+                        "account_id": account_id,
+                        "liability_type": liability_type,
+                        "subtype": subtype,
+                        "name": str((account or {}).get("name") or item.get("name") or "Plaid Liability"),
+                        "current_balance": current_balance,
+                        "currency": str(((account or {}).get("balances") or {}).get("iso_currency_code") or "USD"),
+                        "minimum_payment": _parse_float(item.get("minimum_payment_amount")) or None,
+                        "last_payment_amount": _parse_float(item.get("last_payment_amount")) or None,
+                        "interest_rate": _parse_float(item.get("interest_rate_percentage")) or None,
+                        "raw_payload": {
+                            "provider": "plaid",
+                            "source": "liabilities_get",
+                            "account": account,
+                            "liability": item,
+                            "section": section_key,
+                        },
+                    }
+                )
+    except Exception:
+        # Fallback to account type/subtype inference below.
+        pass
+
+    if results:
+        return results
+
+    # Fallback: infer liabilities from /accounts/get if liabilities product is unavailable.
+    for account in accounts:
+        if not isinstance(account, dict):
+            continue
+        account_type = str(account.get("type") or "").strip().lower()
+        subtype = str(account.get("subtype") or "").strip().lower()
+
+        is_credit = account_type == "credit"
+        is_loan = account_type in {"loan", "mortgage"} or subtype in {
+            "student",
+            "student loan",
+            "mortgage",
+            "auto",
+            "personal",
+            "small business",
+        }
+        if not is_credit and not is_loan:
+            continue
+
+        balances = account.get("balances") if isinstance(account.get("balances"), dict) else {}
+        current_balance = _parse_float(balances.get("current"))
+        if current_balance <= 0:
+            continue
+
+        results.append(
+            {
+                "account_id": str(account.get("account_id") or ""),
+                "liability_type": "credit" if is_credit else "loan",
+                "subtype": subtype or ("credit" if is_credit else "loan"),
+                "name": str(account.get("name") or "Plaid Liability"),
+                "current_balance": current_balance,
+                "currency": str(balances.get("iso_currency_code") or "USD"),
+                "minimum_payment": None,
+                "last_payment_amount": None,
+                "interest_rate": None,
+                "raw_payload": {
+                    "provider": "plaid",
+                    "source": "accounts_get_fallback",
+                    "account": account,
+                },
+            }
+        )
+
+    return results
+
+
+def fetch_plaid_investment_holdings(connection: AccountConnection) -> List[HoldingRecord]:
+    settings = get_settings()
+    access_token = _get_credential(connection, "plaid_access_token")
+    if not access_token:
+        raise ProviderError("Missing Plaid access token for this connection")
+
+    env = settings.PLAID_ENV or "sandbox"
+    base_url = f"https://{env}.plaid.com"
+    data = _http_post_json(
+        f"{base_url}/investments/holdings/get",
+        {
+            "client_id": settings.PLAID_CLIENT_ID,
+            "secret": settings.PLAID_SECRET,
+            "access_token": access_token,
+        },
+        timeout=12,
+    )
+
+    accounts = {str(item.get("account_id") or ""): item for item in data.get("accounts", []) if isinstance(item, dict)}
+    securities = {str(item.get("security_id") or ""): item for item in data.get("securities", []) if isinstance(item, dict)}
+
+    holdings: List[HoldingRecord] = []
+    for holding in data.get("holdings", []):
+        if not isinstance(holding, dict):
+            continue
+        account_id = str(holding.get("account_id") or "")
+        security_id = str(holding.get("security_id") or "")
+        if not account_id or not security_id:
+            continue
+
+        security = securities.get(security_id, {})
+        security_type = str(security.get("type") or "").strip().lower()
+        security_subtype = str(security.get("subtype") or "").strip().lower()
+        quantity = _parse_float(holding.get("quantity"))
+        price_usd = _parse_float(holding.get("institution_price") or holding.get("close_price"))
+        value_usd = _parse_float(holding.get("institution_value"))
+        if value_usd <= 0 and quantity > 0 and price_usd > 0:
+            value_usd = quantity * price_usd
+        if value_usd <= 0:
+            continue
+
+        account = accounts.get(account_id, {})
+        currency = str(holding.get("iso_currency_code") or security.get("iso_currency_code") or "USD")
+        ticker = str(security.get("ticker_symbol") or "")
+        name = str(security.get("name") or ticker or "Plaid Security")
+        symbol = ticker or security_type.upper() or "INVESTMENT"
+
+        holdings.append(
+            HoldingRecord(
+                external_holding_id=f"plaid:security:{account_id}:{security_id}",
+                name=name,
+                symbol=symbol,
+                amount=quantity,
+                price_usd=price_usd,
+                value_usd=value_usd,
+                currency=currency,
+                raw_payload={
+                    "provider": "plaid",
+                    "plaid_source": "investments_holdings",
+                    "account": account,
+                    "holding": holding,
+                    "security": security,
+                    "security_type": security_type,
+                    "security_subtype": security_subtype,
+                },
+            )
+        )
+
+    return holdings
+
+
+def fetch_plaid_transactions_sync(connection: AccountConnection, cursor: Optional[str] = None) -> dict:
+    settings = get_settings()
+    access_token = _get_credential(connection, "plaid_access_token")
+    if not access_token:
+        raise ProviderError("Missing Plaid access token for this connection")
+
+    env = settings.PLAID_ENV or "sandbox"
+    base_url = f"https://{env}.plaid.com"
+    payload = {
+        "client_id": settings.PLAID_CLIENT_ID,
+        "secret": settings.PLAID_SECRET,
+        "access_token": access_token,
+        "count": 200,
+    }
+    if cursor:
+        payload["cursor"] = cursor
+
+    return _http_post_json(
+        f"{base_url}/transactions/sync",
+        payload,
+        timeout=15,
+    )
+
+
+def create_sandbox_transactions(access_token: str, transactions: List[dict]) -> dict:
+    settings = get_settings()
+    if not access_token:
+        raise ProviderError("Missing access token for sandbox transaction generation")
+    return _http_post_json(
+        "https://sandbox.plaid.com/sandbox/transactions/create",
+        {
+            "client_id": settings.PLAID_CLIENT_ID,
+            "secret": settings.PLAID_SECRET,
+            "access_token": access_token,
+            "transactions": transactions,
+        },
+        timeout=15,
+    )
+
+
+def parse_transaction_date(raw_value: object) -> Optional[date]:
+    value = str(raw_value or "").strip()
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def serialize_payload(payload: Optional[dict]) -> str:

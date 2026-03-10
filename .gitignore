@@ -6,12 +6,13 @@ __pycache__/
 *.pyo
 .venv
 
-# ===== 环境变量（绝不提交！）=====
+# ===== 环境变量=====
 .env
 .env.local
 .env.*.local
+.env.docker
 
-# ===== 数据库文件（本地生成）=====
+# ===== 数据库文件=====
 *.db
 *.sqlite3
 wealth_hub.db
