@@ -41,8 +41,8 @@ function AppShell() {
   }, [token])
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[250px_1fr]">
-      <div className="hidden lg:block">
+    <div className="min-h-screen lg:pl-[250px]">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-[250px]">
         <Sidebar />
       </div>
 

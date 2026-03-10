@@ -54,3 +54,21 @@ export async function getWalletsSummary(token: string) {
 export async function getWalletHoldings(token: string, accountId: number) {
   return apiRequest<ApiEnvelope<WalletHoldingsPayload>>(`/accounts/wallets/${accountId}/holdings`, { token })
 }
+
+export type SeedDemoPayload = {
+  seeded_transactions: number
+  connection_id: number
+  connection_name: string
+  sync_job_id: number
+  total_income_12m: number
+  total_expense_12m: number
+  current_month_income: number
+  current_month_expense: number
+}
+
+export async function seedPlaidCurrentMonthDemo(token: string) {
+  return apiRequest<ApiEnvelope<SeedDemoPayload>>('/accounts/plaid/seed-current-month-demo', {
+    method: 'POST',
+    token,
+  })
+}

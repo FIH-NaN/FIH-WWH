@@ -264,3 +264,137 @@ export type WalletHoldingsPayload = {
   total_value_usd: number
   chains: WalletChainGroup[]
 }
+
+export type BalanceSheetEntry = {
+  category: string
+  amount: number
+}
+
+export type BalanceSheet = {
+  net_worth: number
+  assets: BalanceSheetEntry[]
+  liabilities: BalanceSheetEntry[]
+  totals?: {
+    assets: number
+    liabilities: number
+  }
+}
+
+export type IncomeStatementItem = {
+  category: string
+  actual: number
+  budgeted: number
+}
+
+export type IncomeStatement = {
+  income_items: IncomeStatementItem[]
+  expense_items: IncomeStatementItem[]
+  remaining_balance: number
+}
+
+export type AIAdvice = {
+  advice: string
+}
+
+export type PortfolioAssetItem = {
+  name: string
+  value: number
+}
+
+export type PortfolioLiabilityItem = {
+  name: string
+  amount: number
+  type?: string
+}
+
+export type Portfolio = {
+  net_worth: number
+  assets: PortfolioAssetItem[]
+  liabilities: PortfolioLiabilityItem[]
+}
+
+export type InvestmentHolding = {
+  name: string
+  symbol?: string
+  account_name?: string
+  value_usd: number
+  weight_pct: number
+}
+
+export type InvestmentPortfolio = {
+  total_value_usd?: number
+  holdings: InvestmentHolding[]
+}
+
+export type MarketIndicator = {
+  symbol: string
+  name: string
+  value: number
+  unit: string
+  status?: string
+}
+
+export type MarketGroup = {
+  group: string
+  indicators: MarketIndicator[]
+}
+
+export type MarketData = {
+  groups: MarketGroup[]
+  indicators: MarketIndicator[]
+}
+
+export type MonthlyTransaction = {
+  id: string
+  date: string
+  amount: number
+  category: string
+  description: string
+}
+
+export type MonthlyTransactions = {
+  transactions: MonthlyTransaction[]
+  count: number
+  total: number
+}
+
+export type TimeSeriesPoint = {
+  date: string
+  amount: number
+}
+
+export type TimeSeries = {
+  data: TimeSeriesPoint[]
+  average: number
+}
+
+export type BudgetItem = {
+  id: number
+  flow_type: 'income' | 'expense'
+  category: string
+  amount: number
+}
+
+export type BudgetPayload = {
+  month_key: string
+  items: BudgetItem[]
+}
+
+export type AdvisorConversationSummary = {
+  id: number
+  title: string
+  updated_at?: string | null
+}
+
+export type AdvisorMessage = {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  created_at?: string | null
+}
+
+export type AdvisorConversation = {
+  id: number
+  title: string
+  messages: AdvisorMessage[]
+}

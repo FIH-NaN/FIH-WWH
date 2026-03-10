@@ -2,7 +2,7 @@ import { AlertTriangle, Building2, Loader2, Plus, RefreshCw, Wallet } from 'luci
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePlaidLink } from 'react-plaid-link'
 import { useAccount, useChainId, useConnect, useDisconnect } from 'wagmi'
-import { connectAccount, createPlaidLinkToken, getSyncStatus, getWalletHoldings, getWalletsSummary, triggerSync } from '../services/accountsService'
+import { connectAccount, createPlaidLinkToken, getSyncStatus, getWalletHoldings, getWalletsSummary, seedPlaidCurrentMonthDemo, triggerSync } from '../services/accountsService'
 import AddAssetModal from '../features/assets/AddAssetModal'
 import { createAsset, listAssets } from '../services/assetsService'
 import { useAuth } from '../state/AuthContext'
@@ -44,6 +44,7 @@ function AssetsPage() {
   const [syncStatus, setSyncStatus] = useState<SyncStatusPayload | null>(null)
   const [bindingWallet, setBindingWallet] = useState(false)
   const [bindingBank, setBindingBank] = useState(false)
+  const [seedingDemo, setSeedingDemo] = useState(false)
   const [plaidLinkToken, setPlaidLinkToken] = useState('')
   const [manualAssets, setManualAssets] = useState<Asset[]>([])
   const [manualAssetsLoading, setManualAssetsLoading] = useState(false)
@@ -211,6 +212,31 @@ function AssetsPage() {
     }
   }
 
+  const handleSeedPlaidDemo = async () => {
+    if (!token) return
+
+    setSeedingDemo(true)
+    setError('')
+    setFeedback('')
+    try {
+      const response = await seedPlaidCurrentMonthDemo(token)
+      const seeded = response.data
+      setFeedback(
+        `Demo seeded via ${seeded.connection_name}. Current month Income ${formatUsd(seeded.current_month_income)}, Expense ${formatUsd(seeded.current_month_expense)}.`,
+      )
+
+      await loadWalletSummary()
+      await loadManualAssets()
+      setActiveWalletId(seeded.connection_id)
+      await loadWalletHoldings(seeded.connection_id)
+      window.dispatchEvent(new Event('wwh:assets-updated'))
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Failed to seed Plaid demo data')
+    } finally {
+      setSeedingDemo(false)
+    }
+  }
+
   const handleAddManualAsset = async (payload: AssetCreateInput) => {
     if (!token) return
     setAddingAsset(true)
@@ -329,11 +355,21 @@ function AssetsPage() {
             <button
               type="button"
               onClick={() => openPlaidLink()}
-              disabled={!plaidReady || bindingBank || syncing}
+              disabled={!plaidReady || bindingBank || syncing || seedingDemo}
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Building2 size={14} />
               {!plaidLinkToken ? 'Preparing Bank Link...' : plaidReady ? 'Connect Bank' : 'Loading Plaid...'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleSeedPlaidDemo()}
+              disabled={seedingDemo || syncing || bindingBank}
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-medium text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Plus size={14} />
+              {seedingDemo ? 'Seeding Demo...' : 'Seed Plaid Demo Data'}
             </button>
 
             <select
@@ -347,7 +383,7 @@ function AssetsPage() {
             <button
               type="button"
               onClick={() => handleSync(activeWalletId ?? undefined)}
-              disabled={syncing || wallets.length === 0}
+              disabled={syncing || wallets.length === 0 || seedingDemo}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
             >
               <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
@@ -378,7 +414,7 @@ function AssetsPage() {
         <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
           <p className="font-semibold">Plaid Sandbox Test Hint</p>
           <p className="mt-1">Use these credentials inside the Plaid Link popup:</p>
-          <p className="font-mono text-xs mt-1">username: user_good</p>
+          <p className="font-mono text-xs mt-1">username: user_transactions_dynamic</p>
           <p className="font-mono text-xs">password: pass_good</p>
           <a
             href="https://plaid.com/docs/sandbox/test-credentials/"

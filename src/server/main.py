@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import logging
 from src.server.config import get_settings
 from src.server.db.database import init_db
-from src.server.routers import auth, assets, accounts
+from src.server.routers import auth, assets, accounts, analytics, transactions
 from src.server.util.scheduler import start_scheduler, shutdown_scheduler
 from src.server.util.tasks import register_default_tasks
 
@@ -58,6 +58,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(assets.router)
 app.include_router(accounts.router)
+app.include_router(transactions.router)
+app.include_router(analytics.router)
 
 
 @app.get("/")

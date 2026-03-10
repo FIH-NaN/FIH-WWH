@@ -1,11 +1,16 @@
 import json
 from collections import defaultdict
+from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+import requests
 from sqlalchemy.orm import Session
 
+from src.server.config import get_settings
 from src.server.db.database import get_db
 from src.server.db.tables.assets import Asset
+from src.server.db.tables.plaid_liabilities import PlaidLiability
+from src.server.db.tables.plaid_transactions import PlaidTransaction
 from src.server.db.tables.user import User
 from src.server.db.tables.wallet import AccountConnection, AccountProvider, ExternalHolding, SyncJob
 from src.server.routers.web_view_model.schemas import (
@@ -22,12 +27,53 @@ from src.server.routers.web_view_model.schemas import (
     WalletSummaryPayload,
 )
 from src.server.services.auth.security import get_current_user
+from src.server.services.financial_analysis.dashboard_metrics import DashboardMetricsService
 from src.server.services.wallet_sync.constants import MIN_VISIBLE_TOKEN_USD
-from src.server.services.wallet_sync.providers import create_plaid_link_token
+from src.server.services.wallet_sync.providers import create_plaid_link_token, create_sandbox_transactions, exchange_plaid_public_token
 from src.server.services.wallet_sync.sync_service import SyncService
 
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+
+
+def _create_dynamic_sandbox_access_token() -> tuple[str, str]:
+    settings = get_settings()
+    env = (settings.PLAID_ENV or "sandbox").strip().lower()
+    if env != "sandbox":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Demo seeding only works in PLAID sandbox environment")
+
+    payload = {
+        "client_id": settings.PLAID_CLIENT_ID,
+        "secret": settings.PLAID_SECRET,
+        "institution_id": "ins_109508",
+        "initial_products": ["transactions", "investments", "liabilities"],
+        "options": {
+            "override_username": "user_transactions_dynamic",
+            "override_password": "pass_good",
+        },
+    }
+
+    try:
+        resp = requests.post("https://sandbox.plaid.com/sandbox/public_token/create", json=payload, timeout=20)
+        resp.raise_for_status()
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to create sandbox public token: {str(exc)}") from exc
+
+    public_token = str(resp.json().get("public_token") or "").strip()
+    if not public_token:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Sandbox public token was empty")
+
+    try:
+        exchange = exchange_plaid_public_token(public_token)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to exchange sandbox public token: {str(exc)}") from exc
+
+    access_token = str(exchange.get("access_token") or "").strip()
+    item_id = str(exchange.get("item_id") or "").strip()
+    if not access_token or not item_id:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Sandbox exchange did not return access_token/item_id")
+
+    return access_token, item_id
 
 
 @router.post("/connect", response_model=SuccessResponse)
@@ -160,6 +206,16 @@ def delete_account(
         ExternalHolding.account_connection_id == id,
     ).delete(synchronize_session=False)
 
+    db.query(PlaidTransaction).filter(
+        PlaidTransaction.user_id == user.id,
+        PlaidTransaction.account_connection_id == id,
+    ).delete(synchronize_session=False)
+
+    db.query(PlaidLiability).filter(
+        PlaidLiability.user_id == user.id,
+        PlaidLiability.account_connection_id == id,
+    ).delete(synchronize_session=False)
+
     db.delete(row)
     db.commit()
     return SuccessResponse(success=True, message=f"Account disconnected. Removed {removed_assets} synced assets.")
@@ -231,6 +287,93 @@ def get_sync_status(
     )
 
     return SuccessResponse(success=True, data=payload.model_dump())
+
+
+@router.post("/plaid/seed-current-month-demo", response_model=SuccessResponse)
+def seed_current_month_demo_data(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    access_token, item_id = _create_dynamic_sandbox_access_token()
+
+    try:
+        connections = SyncService.connect_account(
+            db=db,
+            user=user,
+            provider="plaid",
+            account_type="bank",
+            credentials={
+                "accessToken": access_token,
+                "itemId": item_id,
+                "name": "Sandbox Dynamic Transactions",
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to connect demo Plaid item: {str(exc)}") from exc
+
+    connection = connections[0]
+    connection_id = int(getattr(connection, "id"))
+    today = date.today().isoformat()
+
+    transactions = [
+        {
+            "amount": -5200.00,
+            "date_posted": today,
+            "date_transacted": today,
+            "description": "Salary Payroll Current Month",
+        },
+        {
+            "amount": -350.00,
+            "date_posted": today,
+            "date_transacted": today,
+            "description": "Bonus Current Month",
+        },
+        {
+            "amount": 1380.50,
+            "date_posted": today,
+            "date_transacted": today,
+            "description": "Rent Current Month",
+        },
+        {
+            "amount": 210.75,
+            "date_posted": today,
+            "date_transacted": today,
+            "description": "Utilities Current Month",
+        },
+        {
+            "amount": 128.30,
+            "date_posted": today,
+            "date_transacted": today,
+            "description": "Groceries Current Month",
+        },
+    ]
+
+    try:
+        create_sandbox_transactions(access_token=access_token, transactions=transactions)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Failed to seed sandbox transactions: {str(exc)}") from exc
+
+    sync_job = SyncService.create_sync_job(db=db, user_id=int(getattr(user, "id")), account_id=connection_id, mode="quick")
+    sync_job_id = int(getattr(sync_job, "id"))
+    SyncService.run_sync_job(sync_job_id)
+
+    totals = DashboardMetricsService.build_totals(db=db, user_id=int(getattr(user, "id")))
+    current_income = DashboardMetricsService.build_accounting_current_month(db=db, user_id=int(getattr(user, "id")), flow="income")
+    current_expense = DashboardMetricsService.build_accounting_current_month(db=db, user_id=int(getattr(user, "id")), flow="expense")
+
+    return SuccessResponse(
+        success=True,
+        data={
+            "seeded_transactions": len(transactions),
+            "connection_id": connection_id,
+            "connection_name": str(getattr(connection, "name") or "Sandbox Dynamic Transactions"),
+            "sync_job_id": sync_job_id,
+            "total_income_12m": totals.get("total_income", 0.0),
+            "total_expense_12m": totals.get("total_expense", 0.0),
+            "current_month_income": current_income.get("total", 0.0),
+            "current_month_expense": current_expense.get("total", 0.0),
+        },
+    )
 
 
 def _parse_holding_payload(raw_payload: object) -> dict:

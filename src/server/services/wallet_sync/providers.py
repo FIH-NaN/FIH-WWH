@@ -384,8 +384,7 @@ def create_plaid_link_token(user_id: int) -> dict:
         "language": "en",
         "country_codes": ["US"],
         "user": {"client_user_id": str(user_id)},
-        "products": ["auth", "transactions", "investments"],
-        "optional_products": ["liabilities"],
+        "products": ["auth", "transactions", "investments", "liabilities"],
     }
     if settings.PLAID_REDIRECT_URI:
         payload["redirect_uri"] = settings.PLAID_REDIRECT_URI
@@ -450,6 +449,154 @@ def fetch_plaid_holdings(connection: AccountConnection) -> List[HoldingRecord]:
         )
 
     return holdings
+
+
+def fetch_plaid_accounts(connection: AccountConnection) -> List[dict]:
+    settings = get_settings()
+    access_token = _get_credential(connection, "plaid_access_token")
+    if not access_token:
+        raise ProviderError("Missing Plaid access token for this connection")
+
+    env = settings.PLAID_ENV or "sandbox"
+    base_url = f"https://{env}.plaid.com"
+    data = _http_post_json(
+        f"{base_url}/accounts/get",
+        {
+            "client_id": settings.PLAID_CLIENT_ID,
+            "secret": settings.PLAID_SECRET,
+            "access_token": access_token,
+        },
+        timeout=10,
+    )
+    accounts = data.get("accounts")
+    return accounts if isinstance(accounts, list) else []
+
+
+def fetch_plaid_liabilities(connection: AccountConnection) -> List[dict]:
+    settings = get_settings()
+    access_token = _get_credential(connection, "plaid_access_token")
+    if not access_token:
+        raise ProviderError("Missing Plaid access token for this connection")
+
+    env = settings.PLAID_ENV or "sandbox"
+    base_url = f"https://{env}.plaid.com"
+
+    accounts = fetch_plaid_accounts(connection)
+    account_map = {
+        str(item.get("account_id") or ""): item
+        for item in accounts
+        if isinstance(item, dict)
+    }
+
+    results: List[dict] = []
+
+    # First, try rich liabilities endpoint when product is enabled.
+    try:
+        data = _http_post_json(
+            f"{base_url}/liabilities/get",
+            {
+                "client_id": settings.PLAID_CLIENT_ID,
+                "secret": settings.PLAID_SECRET,
+                "access_token": access_token,
+            },
+            timeout=12,
+        )
+        liabilities_obj = data.get("liabilities") if isinstance(data.get("liabilities"), dict) else {}
+
+        for section_key in ("credit", "student", "mortgage"):
+            section = liabilities_obj.get(section_key)
+            if not isinstance(section, list):
+                continue
+            for item in section:
+                if not isinstance(item, dict):
+                    continue
+                account_id = str(item.get("account_id") or "")
+                account = account_map.get(account_id, {})
+                subtype = str((account or {}).get("subtype") or section_key)
+                liability_type = "credit" if section_key == "credit" else "loan"
+
+                current_balance = 0.0
+                if section_key == "credit":
+                    current_balance = _parse_float(item.get("last_statement_balance"))
+                else:
+                    current_balance = _parse_float(item.get("outstanding_principal_balance"))
+
+                if current_balance <= 0:
+                    current_balance = _parse_float(((account or {}).get("balances") or {}).get("current"))
+                if current_balance <= 0:
+                    continue
+
+                results.append(
+                    {
+                        "account_id": account_id,
+                        "liability_type": liability_type,
+                        "subtype": subtype,
+                        "name": str((account or {}).get("name") or item.get("name") or "Plaid Liability"),
+                        "current_balance": current_balance,
+                        "currency": str(((account or {}).get("balances") or {}).get("iso_currency_code") or "USD"),
+                        "minimum_payment": _parse_float(item.get("minimum_payment_amount")) or None,
+                        "last_payment_amount": _parse_float(item.get("last_payment_amount")) or None,
+                        "interest_rate": _parse_float(item.get("interest_rate_percentage")) or None,
+                        "raw_payload": {
+                            "provider": "plaid",
+                            "source": "liabilities_get",
+                            "account": account,
+                            "liability": item,
+                            "section": section_key,
+                        },
+                    }
+                )
+    except Exception:
+        # Fallback to account type/subtype inference below.
+        pass
+
+    if results:
+        return results
+
+    # Fallback: infer liabilities from /accounts/get if liabilities product is unavailable.
+    for account in accounts:
+        if not isinstance(account, dict):
+            continue
+        account_type = str(account.get("type") or "").strip().lower()
+        subtype = str(account.get("subtype") or "").strip().lower()
+
+        is_credit = account_type == "credit"
+        is_loan = account_type in {"loan", "mortgage"} or subtype in {
+            "student",
+            "student loan",
+            "mortgage",
+            "auto",
+            "personal",
+            "small business",
+        }
+        if not is_credit and not is_loan:
+            continue
+
+        balances = account.get("balances") if isinstance(account.get("balances"), dict) else {}
+        current_balance = _parse_float(balances.get("current"))
+        if current_balance <= 0:
+            continue
+
+        results.append(
+            {
+                "account_id": str(account.get("account_id") or ""),
+                "liability_type": "credit" if is_credit else "loan",
+                "subtype": subtype or ("credit" if is_credit else "loan"),
+                "name": str(account.get("name") or "Plaid Liability"),
+                "current_balance": current_balance,
+                "currency": str(balances.get("iso_currency_code") or "USD"),
+                "minimum_payment": None,
+                "last_payment_amount": None,
+                "interest_rate": None,
+                "raw_payload": {
+                    "provider": "plaid",
+                    "source": "accounts_get_fallback",
+                    "account": account,
+                },
+            }
+        )
+
+    return results
 
 
 def fetch_plaid_investment_holdings(connection: AccountConnection) -> List[HoldingRecord]:

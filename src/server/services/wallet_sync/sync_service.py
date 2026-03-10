@@ -20,12 +20,14 @@ from src.server.db.tables.wallet import (
     SyncJobStatus,
 )
 from src.server.db.tables.plaid_transactions import PlaidTransaction
+from src.server.db.tables.plaid_liabilities import PlaidLiability
 from src.server.services.wallet_sync.providers import (
     EvmHoldingsResult,
     ProviderError,
     exchange_plaid_public_token,
     fetch_evm_holdings,
     fetch_plaid_investment_holdings,
+    fetch_plaid_liabilities,
     fetch_plaid_holdings,
     fetch_plaid_transactions_sync,
     parse_transaction_date,
@@ -264,6 +266,51 @@ class SyncService:
             SyncService._store_plaid_cursor(db=db, connection_id=connection_id, cursor=next_cursor)
 
     @staticmethod
+    def _sync_plaid_liabilities(db: Session, user_id: int, connection_id: int, connection: AccountConnection) -> None:
+        payload = fetch_plaid_liabilities(connection=connection)
+        seen_account_ids: set[str] = set()
+
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+
+            account_id = str(item.get("account_id") or "").strip()
+            if not account_id:
+                continue
+            seen_account_ids.add(account_id)
+
+            row = db.query(PlaidLiability).filter(
+                PlaidLiability.account_connection_id == connection_id,
+                PlaidLiability.account_id == account_id,
+            ).first()
+
+            if row is None:
+                row = PlaidLiability(
+                    user_id=user_id,
+                    account_connection_id=connection_id,
+                    account_id=account_id,
+                )
+                db.add(row)
+
+            row.liability_type = str(item.get("liability_type") or "loan")
+            row.subtype = str(item.get("subtype") or "") or None
+            row.name = str(item.get("name") or "Plaid Liability")
+            row.current_balance = float(item.get("current_balance") or 0.0)
+            row.currency = str(item.get("currency") or "USD")
+            row.minimum_payment = float(item.get("minimum_payment")) if item.get("minimum_payment") is not None else None
+            row.last_payment_amount = float(item.get("last_payment_amount")) if item.get("last_payment_amount") is not None else None
+            row.interest_rate = float(item.get("interest_rate")) if item.get("interest_rate") is not None else None
+            row.raw_payload = json.dumps(item.get("raw_payload") or {})
+
+        existing_rows = db.query(PlaidLiability).filter(
+            PlaidLiability.user_id == user_id,
+            PlaidLiability.account_connection_id == connection_id,
+        ).all()
+        for row in existing_rows:
+            if str(getattr(row, "account_id") or "") not in seen_account_ids:
+                db.delete(row)
+
+    @staticmethod
     def create_sync_job(db: Session, user_id: int, account_id: Optional[int], mode: str = "quick") -> SyncJob:
         sync_mode = (mode or "quick").strip().lower()
         if sync_mode not in {"quick", "deep"}:
@@ -342,6 +389,16 @@ class SyncService:
                         )
                     except Exception as exc:
                         warnings.append(f"connection:{connection_id}:transactions_sync:{str(exc)}")
+
+                    try:
+                        SyncService._sync_plaid_liabilities(
+                            db=db,
+                            user_id=job_user_id,
+                            connection_id=connection_id,
+                            connection=connection,
+                        )
+                    except Exception as exc:
+                        warnings.append(f"connection:{connection_id}:liabilities_sync:{str(exc)}")
                 else:
                     continue
 
