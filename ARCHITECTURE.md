@@ -1,176 +1,133 @@
-# Wealth Wellness Hub - Full Architecture
+# Wealth Wellness Hub - Architecture
 
-## Project Structure
+## Live Deployment
+- Production demo URL: https://elect-coffee-exchange-spell.trycloudflare.com
 
-```
-nan/
-├── src/
-│   ├── entities/                      # Python domain models (shared)
-│   │   ├── assets.py                  # Asset classes
-│   │   ├── liabilities.py             # Liability classes
-│   │   ├── incomes.py                 # Income classes
-│   │   ├── expenses.py                # Expense classes
-│   │   ├── cash_flows.py              # Cash flow models
-│   │   └── wallet.py                  # Wallet aggregate
-│   │
-│   ├── server/                        # FastAPI Backend
-│   │   ├── main.py                    # FastAPI entry point
-│   │   ├── config.py                  # Settings management
-│   │   ├── database.py                # SQLAlchemy setup
-│   │   ├── models.py                  # ORM models (User, Asset, Transaction, Category)
-│   │   ├── schemas.py                 # Pydantic validation schemas
-│   │   ├── requirements.txt           # Python dependencies
-│   │   ├── .env.example               # Environment template
-│   │   ├── README.md                  # Server documentation
-│   │   │
-│   │   ├── core/
-│   │   │   └── security.py            # JWT & password utilities
-│   │   │
-│   │   ├── routers/
-│   │   │   ├── auth.py                # Auth endpoints (register, login, me)
-│   │   │   ├── assets.py              # Asset CRUD & analytics
-│   │   │   ├── transactions.py        # Transaction CRUD & import
-│   │   │   └── categories.py          # Category management
-│   │   │
-│   │   └── entities/                  # Domain models (shared reference)
-│   │
-│   ├── web/                           # React Frontend
-│   │   ├── src/
-│   │   │   ├── App.tsx                # Main dashboard component
-│   │   │   ├── App.css                # Dashboard styles
-│   │   │   └── index.css              # Global styles
-│   │   ├── package.json               # npm dependencies (React, Vite)
-│   │   └── tsconfig.json              # TypeScript config
-│   │
-│   ├── assets.py                      # Original entities (moved to server)
-│   └── schema.sql                     # SQLite schema definition
-│
-├── FIH-WWH.md                         # API specification document
-└── README.md                          # Main project readme
+## High-Level Architecture
+
+WWH is a two-tier web application:
+- Web Client (React/Vite)
+- API Service (FastAPI)
+
+Data is persisted in SQLite and refreshed through explicit sync flows.
+
+```text
+Browser (React)
+   |
+   | HTTPS (via Nginx)
+   v
+Nginx (static + /api proxy)
+   |
+   | HTTP
+   v
+FastAPI (routers/services)
+   |
+   +--> SQLite (users, assets, connections, holdings, transactions, budgets, chat)
+   +--> Plaid APIs (accounts, investments, transactions, liabilities)
+   +--> EVM providers (wallet holdings)
+   +--> Yahoo market data (indicators)
+   +--> MiniMax API (insights/chat)
 ```
 
-## Technology Stack
+## Repository Structure (Current)
 
-### Backend
-- **Framework**: FastAPI (async Python web framework)
-- **Database**: SQLite + SQLAlchemy ORM
-- **Authentication**: JWT (python-jose) + BCrypt
-- **Validation**: Pydantic v2
-- **Server**: Uvicorn ASGI server
-
-### Frontend
-- **Framework**: React 19
-- **Build Tool**: Vite
-- **Language**: TypeScript
-- **Styling**: Pure CSS (no framework)
-
-### Shared Domain Models
-- Python dataclasses in `src/entities/`
-- Covers assets, liabilities, incomes, expenses, cash flows, wallet
-
-## API Endpoints
-
-### Authentication
-```
-POST   /auth/register      - Register new user
-POST   /auth/login         - Login user
-GET    /auth/me            - Get current user info
-```
-
-### Assets
-```
-GET    /assets             - List assets (with filters, pagination)
-POST   /assets             - Create asset
-GET    /assets/{id}        - Get single asset
-PUT    /assets/{id}        - Update asset
-DELETE /assets/{id}        - Delete asset
-GET    /assets/summary     - Asset portfolio summary
-GET    /assets/distribution - Asset distribution by type
-GET    /assets/health-score - Health score & grade
+```text
+FIH-WWH/
+ docker-compose.yml
+ Dockerfile.backend
+ Dockerfile.frontend
+ deploy/
+    nginx.conf
+ src/
+    server/
+       main.py
+       config.py
+       db/
+          database.py
+          tables/
+       routers/
+          auth.py
+          assets.py
+          accounts.py
+          transactions.py
+          analytics.py
+       services/
+          wallet_sync/
+          financial_analysis/
+          user_data/
+          auth/
+       util/
+    web/
+        src/
+            pages/
+            services/
+            layout/
+            state/
+            types/
+ FIH-WWH.md
 ```
 
-### Transactions
-```
-GET    /transactions                   - List transactions (with date/type filters)
-POST   /transactions                   - Create transaction
-POST   /transactions/import            - Batch import transactions
-```
+## Backend Design
 
-### Categories
-```
-GET    /categories         - List user categories
-POST   /categories         - Create category
-```
+### Router Layer
+- `auth.py`: register/login/me
+- `assets.py`: manual asset CRUD + wealth overview + insights + portfolio analysis
+- `accounts.py`: connect/disconnect/sync/link-token/wallet summary/holdings + Plaid demo seed endpoint
+- `transactions.py`: manual transaction CRUD/import
+- `analytics.py`: dashboard/accounting/portfolio/market/advisor-chat APIs
 
-## Dashboard UI
+### Service Layer
+- `services/wallet_sync/`: provider adapters, sync orchestration, holdings/transactions/liabilities ingestion
+- `services/financial_analysis/`: dashboard metrics, accounting aggregates, portfolio summaries, market indicators
+- `services/user_data/`: user-facing business operations
+- `services/auth/`: token/security helpers
 
-Single-page React dashboard displaying:
-- **KPI Strip**: Total assets, liabilities, monthly income/expense, net cash flow
-- **Assets Table**: Holdings with category, liquidity status, values
-- **Asset Distribution**: Mini bar chart by category
-- **Liabilities Table**: Debt obligations with monthly payments
-- **Income Table**: Income sources and monthly amounts
-- **Expense Table**: Spending by category with essential flag
-- **Expense Distribution**: Mini bar chart by category
-- **Recent Cash Flows**: Transaction history with inflow/outflow tags
+### Data Layer
+Core persisted entities include:
+- Users and auth data
+- Manual assets and transactions
+- Account connections (Plaid/EVM) and credentials
+- External holdings
+- Plaid transactions and liabilities
+- Budget items
+- Advisor conversations/messages
 
-## Development & Deployment
+## Frontend Design
 
-### Quick Start
+### Routing
+- `/dashboard`
+- `/assets`
+- `/accounting`
+- `/portfolio`
+- `/ai-advisor`
+- `/settings`
 
-**Backend**:
-```bash
-cd src/server
-python main.py  # Runs on http://localhost:8000
-```
+### Data Access Pattern
+- Frontend calls typed service functions (`src/web/src/services/*`)
+- APIs return envelope shape `{ success, data, message }`
+- Pages refresh from DB-backed endpoints
+- Sync actions are user-triggered (not continuous polling)
 
-**Frontend**:
-```bash
-cd src/web
-npm install
-npm run dev     # Runs on http://localhost:5173
-```
+## Sync and Refresh Strategy
 
-### Database
+1. User connects account/wallet.
+2. User triggers sync (`quick` or `deep`).
+3. Backend ingests and stores normalized data.
+4. UI reloads from persisted DB aggregates.
 
-- Auto-initialized on first server run
-- SQLite file stored as `wealth_hub.db`
-- Schema defined in `src/entities/schema.sql`
+This improves performance and demo reliability by avoiding dependency on every page load.
 
-### Authentication Flow
+## Deployment Topology
 
-1. User registers via `/auth/register`
-2. Server returns JWT token
-3. Client stores token in session
-4. All subsequent requests include token (query param or header)
-5. Server validates JWT and checks user ownership of resources
+### Docker Compose Services
+- `backend`: FastAPI (port 8080 internally)
+- `frontend`: Nginx serving SPA and proxying `/api` to backend
 
-## Design Philosophy
+### Nginx Rules
+- `/` -> serve built React app
+- `/api/` -> proxy to `backend:8080`
 
-- **Separation of Concerns**: Core domain logic in `entities/`, HTTP layer in `routers/`
-- **Type Safety**: Python type hints + Pydantic validation + TypeScript
-- **DRY**: Shared entity models between backend and frontend documentation
-- **Stateless**: JWT-based auth enables horizontal scaling
-- **Simplicity**: No external UI framework, pure CSS for maximum control
-- **API-First**: Clear contract defined before implementation
-
-## Key Features Implemented
-
-✓ User registration & JWT authentication
-✓ Asset CRUD with type-based classification
-✓ Asset portfolio analytics (summary, distribution, health score)
-✓ Transaction tracking and batch import
-✓ Custom category management
-✓ Responsive dashboard with inline visualization
-✓ Currency & timezone awareness
-✓ Comprehensive error handling
-
-## Next Steps
-
-- [ ] Connect React frontend to FastAPI backend
-- [ ] Add real-time price updates for crypto/stocks
-- [ ] Implement advanced filtering and search
-- [ ] Add data export (CSV, PDF)
-- [ ] Add scenario-based "what-if" analysis
-- [ ] Implement goal tracking
-- [ ] Add multi-currency support with conversion
+## Reliability Notes
+- Market indicators use cache + fallback behavior to tolerate rate limits.
+- Plaid demo endpoint can seed current-month transactions for deterministic accounting demos.
+- Sidebar is fixed on desktop while content scrolls independently.

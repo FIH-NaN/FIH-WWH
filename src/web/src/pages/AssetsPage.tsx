@@ -410,22 +410,20 @@ function AssetsPage() {
         </p>
       ) : null}
 
-      {import.meta.env.DEV ? (
-        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-          <p className="font-semibold">Plaid Sandbox Test Hint</p>
-          <p className="mt-1">Use these credentials inside the Plaid Link popup:</p>
-          <p className="font-mono text-xs mt-1">username: user_transactions_dynamic</p>
-          <p className="font-mono text-xs">password: pass_good</p>
-          <a
-            href="https://plaid.com/docs/sandbox/test-credentials/"
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-block underline"
-          >
-            Plaid sandbox credentials docs
-          </a>
-        </div>
-      ) : null}
+      <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+        <p className="font-semibold">Plaid Sandbox Test Hint</p>
+        <p className="mt-1">Use these credentials inside the Plaid Link popup:</p>
+        <p className="font-mono text-xs mt-1">username: user_good</p>
+        <p className="font-mono text-xs">password: pass_good</p>
+        <a
+          href="https://plaid.com/docs/sandbox/test-credentials/"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-block underline"
+        >
+          Plaid sandbox credentials docs
+        </a>
+      </div>
 
       <div className="glass-panel p-4">
         <div className="mb-3 flex items-center justify-between">
